@@ -53,6 +53,8 @@ import seeem
 from dataset import Coherence_Dataset, MiniDataset
 from functions import *
 
+random.seed(0)
+
 '''
 This standalone file generates all the labels needed for the present iteration
 '''
@@ -79,18 +81,6 @@ elif dataset == 'ego4d':
     people_path = '/z/relh/ego4d/people/'
     root_flow_path = '/z/relh/ego4d/flow/'
 
-img_size = (576, 1024)
-embed_size = (144, 256)
-anno_size = (1080, 1920)
-fps_offset_mult = 1
-
-if 'ego4d' in dataset:
-    img_size = (648, 864)
-    embed_size = (162, 216)
-    anno_size = (1440, 1920)
-    fps_offset_mult = 2
-    object_threshold = 0.88
-
 class Struct:
     def __init__(self, **entries):
         self.__dict__.update(entries)
@@ -101,28 +91,44 @@ if __name__ == "__main__":
     # calculate epipole
     # then load contact points
     # from contact points make trajectories
+
+    img_size = (576, 1024)
+    embed_size = (144, 256)
+    anno_size = (1080, 1920)
+    fps_offset_mult = 1
+
+    if 'ego4d' in dataset:
+        img_size = (648, 864)
+        embed_size = (162, 216)
+        anno_size = (1440, 1920)
+        fps_offset_mult = 2
+        object_threshold = 0.88
+
     ddp = False
-    batch_size = 10
+    batch_size = 5
     args = {'fps_offset_mult': fps_offset_mult, 'offset': 10}
     args = Struct(**args)
+    args.ransac_threshold = 3.3e-7 * args.offset * args.fps_offset_mult
 
-    train_frames = pickle.load(open(f'./util/10_{dataset}_train_frames.pkl', 'rb'))
+    #train_frames = pickle.load(open(f'./util/10_{dataset}_train_frames.pkl', 'rb'))
     valid_frames = pickle.load(open(f'./util/10_{dataset}_valid_frames.pkl', 'rb'))
 
-    train_data = Coherence_Dataset(train_frames, dataset, data_path, img_size, train=True)
+    #random.shuffle(train_frames)
+    random.shuffle(valid_frames)
+
+    #train_data = Coherence_Dataset(train_frames, dataset, data_path, img_size, train=True)
     valid_data = Coherence_Dataset(valid_frames, dataset, data_path, img_size)
 
-    train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=0 if ddp else 2)#, sampler=train_sampler)#, pin_memory=True)
+    #train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=0 if ddp else 2)#, sampler=train_sampler)#, pin_memory=True)
     valid_loader = DataLoader(valid_data, batch_size=batch_size, num_workers=0 if ddp else 2)#, sampler=valid_sampler)#, pin_memory=True)
 
     mesh_grids = torch.stack(list(torch.meshgrid(torch.linspace(-1, 1, steps=img_size[1]), torch.linspace(-1, 1, img_size[0]), indexing='xy')))
     mesh_grids = einops.repeat(mesh_grids, 'c h w -> b h w c', b=batch_size).cuda(non_blocking=True)
 
-    ransac = RANSAC(model_type='fundamental', inl_th=3.3e-7, batch_size=4096, max_iter=5, confidence=0.99999, max_lo_iters=5)
-    my_seeem = seeem.WebPage('/home/relh/public_html/experiments/test_epipoles/index.html')
+    ransac = RANSAC(model_type='fundamental', inl_th=args.ransac_threshold, batch_size=4096, max_iter=5, confidence=0.99999, max_lo_iters=5)
+    my_seeem = seeem.WebPage('/home/relh/public_html/experiments/test_new_epipoles_v5/index.html')
 
-    for i, batch in enumerate(train_loader):
-        print(i)
+    for i, batch in enumerate(valid_loader):
         now_future_flow = batch['now']['flow_n_f'].cuda(non_blocking=True).float()
         future_now_flow = batch['future']['flow_f_n'].cuda(non_blocking=True).float()
 
@@ -147,17 +153,50 @@ if __name__ == "__main__":
         now_future_epipoles = calculate_epipoles(now_future_F_mat)
         future_now_epipoles = calculate_epipoles(future_now_F_mat)
 
-        for b in range(now_rgb.shape[0]):
-            print(b)
-            my_seeem.store_image(now_rgb[b], 'rgb_0', i*batch_size+b, option='rgb')
-            my_seeem.store_image(future_rgb[b], f'rgb_{0+args.offset}', i*batch_size+b, option='rgb')
+        now_epipoles = torch.zeros((now_rgb.shape[0], 1, now_rgb.shape[2], now_rgb.shape[3]))
+        future_epipoles = torch.zeros((now_rgb.shape[0], 1, now_rgb.shape[2], now_rgb.shape[3]))
 
-            my_seeem.store_image(now_future_flow[b], 'flow_pos', i*batch_size+b, option='flow')
-            my_seeem.store_image(future_now_flow[b], 'flow_neg', i*batch_size+b, option='flow')
+        now_future_epipoles = now_future_epipoles.clamp(-0.999, 0.999)
+        future_now_epipoles = future_now_epipoles.clamp(-0.999, 0.999)
+
+        now_future_epipoles[:, 0] = (now_future_epipoles[:, 0] * now_rgb.shape[2] / 2.0 + now_rgb.shape[2] / 2.0)
+        now_future_epipoles[:, 1] = (now_future_epipoles[:, 1] * now_rgb.shape[3] / 2.0 + now_rgb.shape[3] / 2.0)
+
+        future_now_epipoles[:, 0] = (future_now_epipoles[:, 0] * now_rgb.shape[2] / 2.0 + now_rgb.shape[2] / 2.0)
+        future_now_epipoles[:, 1] = (future_now_epipoles[:, 1] * now_rgb.shape[3] / 2.0 + now_rgb.shape[3] / 2.0)
+
+        now_future_epipoles = now_future_epipoles.int()
+        future_now_epipoles = future_now_epipoles.int()
+
+        #now_epipoles = F.interpolate(now_epipoles, size=(now_rgb.shape[2] // 5, now_rgb.shape[3] // 5))
+        #(now_future_epipoles[:, 0]-15).clamp(0, now_rgb.shape[2]).int():(now_future_epipoles[:, 0]+15).clamp(0 ,now_rgb.shape[2]).int(),\
+        #(now_future_epipoles[:, 1]-15).clamp(0, now_rgb.shape[3]).int():(now_future_epipoles[:, 1]+15).clamp(0, now_rgb.shape[3]).int()] = 1
+
+        for b in range(now_rgb.shape[0]):
+            for x in range(-30,30):
+                for y in range(-30,30):
+                    now_epipoles[b, 0, \
+                                 min(max(now_future_epipoles[b, 0]+x, 0), now_epipoles.shape[2]-1),\
+                                 min(max(now_future_epipoles[b, 1]+y, 0), now_epipoles.shape[3]-1)] = 0.1 * (31 - abs(x)) * (31 - abs(y))
+                    future_epipoles[b, 0, \
+                                 min(max(future_now_epipoles[b, 0]+x, 0), now_epipoles.shape[2]-1),\
+                                 min(max(future_now_epipoles[b, 1]+y, 0), now_epipoles.shape[3]-1)] = 0.1 * (31 - abs(x)) * (31 - abs(y))
+
+            my_seeem.store_image(now_rgb[b], 'rgb', i*batch_size+b, option='rgb')
+            my_seeem.store_image(now_future_flow[b], 'flow', i*batch_size+b, option='flow')
+            my_seeem.store_image(now_epipoles[b], 'epipole', i*batch_size+b, option='save')
+            my_seeem.store_image(now_future_cycle_inconsistent[b], 'cycle', i*batch_size+b, option='save')
+
+            my_seeem.store_image(future_rgb[b], f'rgb', i*batch_size+b+0.5, option='rgb')
+            my_seeem.store_image(future_now_flow[b], 'flow', i*batch_size+b+0.5, option='flow')
+            my_seeem.store_image(future_epipoles[b], 'epipole', i*batch_size+b+0.5, option='save')
+            my_seeem.store_image(future_now_cycle_inconsistent[b], 'cycle', i*batch_size+b+0.5, option='save')
 
             #my_seeem.store_image(dummy_image, 'save', i*batch_size+b, option='save')
             #my_seeem.store_image(dummy_image, 'pca', i*batch_size+b, option='pca')
             #my_seeem.store_image(dummy_image, 'rgb', i*batch_size+b, option='rgb')
 
         my_seeem.write()
-        break
+
+        if i > 3:
+            break
