@@ -980,6 +980,7 @@ def fit_motion_model(mask, cycle_inconsistent, that_corr_grid, ransac, acceptabl
         ptsA = (mesh_grids[b][pts_mask]).float()
         ptsB = (that_corr_grid[b][pts_mask]).float()
         pts = random.sample(range(0, ptsA.shape[0]), min(2500, ptsA.shape[0]))
+        pdb.set_trace()
 
         F_mat, inlier_mask = ransac.forward(ptsA[pts], ptsB[pts])
 
@@ -1040,9 +1041,13 @@ def epipolar_distance(that_corr_grid, this_F_mats, mesh_grids, args):
 def calculate_epipoles(this_F_mats):
     epipoles = []
     for b in range(this_F_mats.shape[0]):
-        epipoles.append(torch.tensor(scipy.linalg.null_space(this_F_mats[b].T.cpu().numpy())))
+        U, S, V = np.linalg.svd(this_F_mats[b].cpu().numpy())
+        e = V[-1] / V[-1, -1]
+        epipoles.append(torch.tensor(e))
+        #epipoles.append(torch.tensor(scipy.linalg.null_space(this_F_mats[b].T.cpu().numpy())))
     unnorm_epipoles = torch.stack(epipoles)
-    return unnorm_epipoles.squeeze() / unnorm_epipoles[:, -1]
+    return unnorm_epipoles
+    #return unnorm_epipoles.squeeze() / unnorm_epipoles[:, -1]
 
 def flow_above_mean(sed):
     #sed = (torch.linalg.vector_norm(this_flow, dim=-1).float() + 1e-5)

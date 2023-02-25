@@ -54,6 +54,7 @@ from dataset import Coherence_Dataset, MiniDataset
 from functions import *
 
 random.seed(0)
+inv_normalize = transforms.Normalize(mean=[-0.485 / 0.229, -0.456 / 0.224, -0.406 / 0.225], std=[1 / 0.229, 1 / 0.224, 1 / 0.225])
 
 '''
 This standalone file generates all the labels needed for the present iteration
@@ -105,7 +106,7 @@ if __name__ == "__main__":
         object_threshold = 0.88
 
     ddp = False
-    batch_size = 5
+    batch_size = 15
     args = {'fps_offset_mult': fps_offset_mult, 'offset': 10}
     args = Struct(**args)
     args.ransac_threshold = 3.3e-7 * args.offset * args.fps_offset_mult
@@ -126,7 +127,7 @@ if __name__ == "__main__":
     mesh_grids = einops.repeat(mesh_grids, 'c h w -> b h w c', b=batch_size).cuda(non_blocking=True)
 
     ransac = RANSAC(model_type='fundamental', inl_th=args.ransac_threshold, batch_size=4096, max_iter=5, confidence=0.99999, max_lo_iters=5)
-    my_seeem = seeem.WebPage('/home/relh/public_html/experiments/test_new_epipoles_v5/index.html')
+    my_seeem = seeem.WebPage('/home/relh/public_html/experiments/test_new_epipoles_v7/index.html')
 
     for i, batch in enumerate(valid_loader):
         now_future_flow = batch['now']['flow_n_f'].cuda(non_blocking=True).float()
@@ -153,26 +154,36 @@ if __name__ == "__main__":
         now_future_epipoles = calculate_epipoles(now_future_F_mat)
         future_now_epipoles = calculate_epipoles(future_now_F_mat)
 
+        #unnorm_now_epipoles = now_future_epipoles.squeeze() / now_future_epipoles[:, -1]
+        #unnorm_future_epipoles = future_now_epipoles.squeeze() / future_now_epipoles[:, -1]
+
         now_epipoles = torch.zeros((now_rgb.shape[0], 1, now_rgb.shape[2], now_rgb.shape[3]))
         future_epipoles = torch.zeros((now_rgb.shape[0], 1, now_rgb.shape[2], now_rgb.shape[3]))
 
-        now_future_epipoles = now_future_epipoles.clamp(-0.999, 0.999)
-        future_now_epipoles = future_now_epipoles.clamp(-0.999, 0.999)
+        #pdb.set_trace()
+        #now_future_epipoles = now_future_epipoles.clamp(-0.999, 0.999)
+        #future_now_epipoles = future_now_epipoles.clamp(-0.999, 0.999)
 
-        now_future_epipoles[:, 0] = (now_future_epipoles[:, 0] * now_rgb.shape[2] / 2.0 + now_rgb.shape[2] / 2.0)
-        now_future_epipoles[:, 1] = (now_future_epipoles[:, 1] * now_rgb.shape[3] / 2.0 + now_rgb.shape[3] / 2.0)
+        #now_future_epipoles[:, 0] = (now_future_epipoles[:, 0] * now_rgb.shape[2] / 2.0 + now_rgb.shape[2] / 2.0)
+        #now_future_epipoles[:, 1] = (now_future_epipoles[:, 1] * now_rgb.shape[3] / 2.0 + now_rgb.shape[3] / 2.0)
+        #future_now_epipoles[:, 0] = (future_now_epipoles[:, 0] * now_rgb.shape[2] / 2.0 + now_rgb.shape[2] / 2.0)
+        #future_now_epipoles[:, 1] = (future_now_epipoles[:, 1] * now_rgb.shape[3] / 2.0 + now_rgb.shape[3] / 2.0)
 
-        future_now_epipoles[:, 0] = (future_now_epipoles[:, 0] * now_rgb.shape[2] / 2.0 + now_rgb.shape[2] / 2.0)
-        future_now_epipoles[:, 1] = (future_now_epipoles[:, 1] * now_rgb.shape[3] / 2.0 + now_rgb.shape[3] / 2.0)
+        #now_future_epipoles[:, 0] = (now_future_epipoles[:, 0] + now_rgb.shape[2] / 2.0).clamp(0, now_rgb.shape[2]-1)
+        #now_future_epipoles[:, 1] = (now_future_epipoles[:, 1] + now_rgb.shape[3] / 2.0).clamp(0, now_rgb.shape[3]-1)
+        #future_now_epipoles[:, 0] = (future_now_epipoles[:, 0] + now_rgb.shape[2] / 2.0).clamp(0, now_rgb.shape[2]-1)
+        #future_now_epipoles[:, 1] = (future_now_epipoles[:, 1] + now_rgb.shape[3] / 2.0).clamp(0, now_rgb.shape[3]-1)
 
-        now_future_epipoles = now_future_epipoles.int()
-        future_now_epipoles = future_now_epipoles.int()
+        now_future_epipoles = now_future_epipoles#.int()
+        future_now_epipoles = future_now_epipoles#.int()
 
         #now_epipoles = F.interpolate(now_epipoles, size=(now_rgb.shape[2] // 5, now_rgb.shape[3] // 5))
         #(now_future_epipoles[:, 0]-15).clamp(0, now_rgb.shape[2]).int():(now_future_epipoles[:, 0]+15).clamp(0 ,now_rgb.shape[2]).int(),\
         #(now_future_epipoles[:, 1]-15).clamp(0, now_rgb.shape[3]).int():(now_future_epipoles[:, 1]+15).clamp(0, now_rgb.shape[3]).int()] = 1
 
         for b in range(now_rgb.shape[0]):
+            print(b)
+            '''
             for x in range(-30,30):
                 for y in range(-30,30):
                     now_epipoles[b, 0, \
@@ -181,22 +192,74 @@ if __name__ == "__main__":
                     future_epipoles[b, 0, \
                                  min(max(future_now_epipoles[b, 0]+x, 0), now_epipoles.shape[2]-1),\
                                  min(max(future_now_epipoles[b, 1]+y, 0), now_epipoles.shape[3]-1)] = 0.1 * (31 - abs(x)) * (31 - abs(y))
+            '''
 
+            this_F = now_future_F_mat[b].detach().cpu().numpy()
+            that_F = future_now_F_mat[b].detach().cpu().numpy()
+
+            #this_epipole = np.matmul(this_F, now_future_epipoles[b].cpu().numpy())
+            #that_epipole = np.matmul(that_F, future_now_epipoles[b].cpu().numpy())
+
+            # assume that img1 is the first image, img2 is the second image, and F is the fundamental matrix
+            img1 = inv_normalize(now_rgb[b]).permute(1, 2, 0).detach().cpu().numpy()  # convert PyTorch tensor to numpy array
+            img2 = inv_normalize(future_rgb[b]).permute(1, 2, 0).detach().cpu().numpy()
+
+            # Compute the epipolar lines in image 1 that correspond to points in image 2
+            points1 = np.array([[500, 50], [250, 100], [50, 500], [100, 250], [600, 600]])
+
+            # Compute corresponding epilines in image 2
+            #lines1 = cv2.computeCorrespondEpilines(points1.reshape(-1, 1, 2), 2, that_F).reshape(-1, 3)
+            #lines2 = cv2.computeCorrespondEpilines(points1.reshape(-1, 1, 2), 1, this_F).reshape(-1, 3)
+
+            # TODO just need to convert pts to -1 to 1
+
+            def drawlines(img1,img2,lines,pts1,pts2):
+                ''' img1 - image on which we draw the epilines for the points in img2
+                    lines - corresponding epilines '''
+                r,c,_ = img1.shape
+                #img1 = cv2.cvtColor(img1,cv2.COLOR_GRAY2BGR)
+                #img2 = cv2.cvtColor(img2,cv2.COLOR_GRAY2BGR)
+                img1 = cv2.cvtColor(np.uint8(img1*255), cv2.COLOR_RGB2BGR)  # convert numpy array to OpenCV image
+                img2 = cv2.cvtColor(np.uint8(img2*255), cv2.COLOR_RGB2BGR)
+                for r,pt1,pt2 in zip(lines,pts1,pts2):
+                    pdb.set_trace()
+                    color = tuple(np.random.randint(0,255,3).tolist())
+                    x0,y0 = map(int, [0, -r[2]/r[1] ])
+                    x1,y1 = map(int, [c, -(r[2]+r[0]*c)/r[1] ])
+                    img1 = cv2.line(img1, (x0,y0), (x1,y1), color,3)
+                    img1 = cv2.circle(img1,tuple(pt1),5,color,-3)
+                    img2 = cv2.circle(img2,tuple(pt2),5,color,-3)
+                return img1,img2
+
+            pts1 = np.int32(points1)
+            pts2 = np.int32(points1)
+
+            # Find epilines corresponding to points in right image (second image) and
+            # drawing its lines on left image
+            lines1 = cv2.computeCorrespondEpilines(pts2.reshape(-1,1,2), 2, this_F)
+            lines1 = lines1.reshape(-1,3)
+            img5,img6 = drawlines(img1,img2,lines1,pts1,pts2)
+
+            # Find epilines corresponding to points in left image (first image) and
+            # drawing its lines on right image
+            lines2 = cv2.computeCorrespondEpilines(pts1.reshape(-1,1,2), 1, this_F)
+            lines2 = lines2.reshape(-1,3)
+            img3,img4 = drawlines(img2,img1,lines2,pts2,pts1)
+
+            # Save the image with the epipolar lines drawn
+            my_seeem.store_image(img5, 'epipolar', i*batch_size+b, option='cv2')
             my_seeem.store_image(now_rgb[b], 'rgb', i*batch_size+b, option='rgb')
             my_seeem.store_image(now_future_flow[b], 'flow', i*batch_size+b, option='flow')
             my_seeem.store_image(now_epipoles[b], 'epipole', i*batch_size+b, option='save')
             my_seeem.store_image(now_future_cycle_inconsistent[b], 'cycle', i*batch_size+b, option='save')
 
+            my_seeem.store_image(img3, 'epipolar', i*batch_size+b+0.5, option='cv2')
             my_seeem.store_image(future_rgb[b], f'rgb', i*batch_size+b+0.5, option='rgb')
             my_seeem.store_image(future_now_flow[b], 'flow', i*batch_size+b+0.5, option='flow')
             my_seeem.store_image(future_epipoles[b], 'epipole', i*batch_size+b+0.5, option='save')
             my_seeem.store_image(future_now_cycle_inconsistent[b], 'cycle', i*batch_size+b+0.5, option='save')
 
-            #my_seeem.store_image(dummy_image, 'save', i*batch_size+b, option='save')
-            #my_seeem.store_image(dummy_image, 'pca', i*batch_size+b, option='pca')
-            #my_seeem.store_image(dummy_image, 'rgb', i*batch_size+b, option='rgb')
+        #if i > 3:
+        break
 
-        my_seeem.write()
-
-        if i > 3:
-            break
+    my_seeem.write()

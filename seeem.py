@@ -92,13 +92,15 @@ class WebPage(object):
         os.makedirs(self.path + '/seeem/', exist_ok=True)
 
     def store_image(self, img, name, idx, option='save'):
-        if not torch.is_tensor(img):
+        if not torch.is_tensor(img) and option != 'cv2':
             img = torch.tensor(img)
 
         outpath = f'{self.path}/seeem/{idx}_-_{name}_-_{option}.png'
 
         if option == 'raw':
             save_image(img.float().cpu(), outpath, format='png')
+        elif option == 'cv2':
+            cv2.imwrite(outpath, img)
         elif option == 'save':
             save_image((img / (img.max() + 1e-5)).float().cpu(), outpath, format='png')
         elif option == 'overlay':
