@@ -38,10 +38,10 @@ normalize = transforms.Compose([
 ])
 
 values = (
-	("Definite Background", cv2.GC_BGD),
-	("Probable Background", cv2.GC_PR_BGD),
-	("Definite Foreground", cv2.GC_FGD),
-	("Probable Foreground", cv2.GC_PR_FGD),
+        ("Definite Background", cv2.GC_BGD),
+        ("Probable Background", cv2.GC_PR_BGD),
+        ("Definite Foreground", cv2.GC_FGD),
+        ("Probable Foreground", cv2.GC_PR_FGD),
 )
 
 def make_association_automatic(handlocs, output, segments, net, args, reverse=False):
@@ -968,14 +968,13 @@ def fit_motion_model(mask, cycle_inconsistent, that_corr_grid, ransac, acceptabl
     # fits a motion model between two frames, within mask pixels
     all_F_mats, all_inl = [], []
     for b in range(that_corr_grid.shape[0]):
-        this_F_mats, this_inl = [], []
         pts_mask = (~cycle_inconsistent[b] & mask[b])
 
         if pts_mask.sum() <= 8: pts_mask = mask[b]
         if pts_mask.sum() <= 8: pts_mask = torch.ones(mask[b].shape).bool()
         if pts_mask.sum() <= 8:
-            this_F_mats.append(torch.zeros((F_mat.shape)).cuda())
-            this_inl.append(torch.zeros((inl.shape)).cuda())
+            all_F_mats.append(torch.zeros((F_mat.shape)).cuda())
+            all_inl.append(torch.zeros((inl.shape)).cuda())
 
         ptsA = (mesh_grids[b][pts_mask]).float()
         ptsB = (that_corr_grid[b][pts_mask]).float()
@@ -992,6 +991,49 @@ def fit_motion_model(mask, cycle_inconsistent, that_corr_grid, ransac, acceptabl
 
         pts_mask = ((~inl & mask[b]) & ~cycle_inconsistent[b]).cuda()
     return torch.stack(all_F_mats), torch.stack(all_inl).bool()
+
+
+def cv2_fit_motion_model(this_rgb, that_rgb, not_now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, acceptable, mesh_grids, args):
+    # fits a motion model between two frames, within mask pixels
+    all_F_mats, all_inl = [], []
+    for b in range(this_rgb.shape[0]):
+        # assume that img1 is the first image, img2 is the second image, and F is the fundamental matrix
+        img1 = inv_normalize(this_rgb[b].clone()).permute(1, 2, 0).detach().cpu().numpy()  # convert PyTorch tensor to numpy array
+        img2 = inv_normalize(that_rgb[b].clone()).permute(1, 2, 0).detach().cpu().numpy()
+
+        img1 = cv2.cvtColor(np.uint8(img1*255), cv2.COLOR_RGB2BGR)  # convert numpy array to OpenCV image
+        img2 = cv2.cvtColor(np.uint8(img2*255), cv2.COLOR_RGB2BGR)
+
+        detector = cv2.ORB_create()
+        kp1, des1 = detector.detectAndCompute(img1, None)
+        kp2, des2 = detector.detectAndCompute(img2, None)
+
+        if des1 is None or des2 is None:
+            print('des none')
+            return fit_motion_model(not_now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, acceptable, mesh_grids, args)
+
+        # Find the correspondences between the keypoints in the two images using a matcher
+        matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        matches = matcher.match(des1, des2)
+
+        # Extract the matched keypoints and convert them to numpy arrays
+        pts1 = np.float32([kp1[m.queryIdx].pt for m in matches])
+        pts2 = np.float32([kp2[m.trainIdx].pt for m in matches])
+
+        # Compute the fundamental matrix from the correspondences
+        if pts1.shape[0] == 0 or pts2.shape[0] == 0:
+            print('pts none')
+            return fit_motion_model(not_now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, acceptable, mesh_grids, args)
+
+        F_mat, mask = cv2.findFundamentalMat(pts1, pts2, cv2.FM_RANSAC)
+
+        if F_mat is None or F_mat.shape[0] != 3:
+            print('f mat none')
+            return fit_motion_model(not_now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, acceptable, mesh_grids, args)
+
+        all_F_mats.append(torch.tensor(F_mat))
+    return torch.stack(all_F_mats).cuda().half(), None #torch.stack(all_inl).bool()
+
 
 
 def fit_motion_models(this_labels, that_corr_grid, ransac, acceptable, mesh_grid, args):
@@ -1024,6 +1066,18 @@ def fit_motion_models(this_labels, that_corr_grid, ransac, acceptable, mesh_grid
     return all_F_mats, all_outl
 
 
+def calculate_epipoles(this_F_mats):
+    epipoles = []
+    for b in range(this_F_mats.shape[0]):
+        U, S, V = np.linalg.svd(this_F_mats[b].cpu().numpy())
+        e = V[-1] / V[-1, -1]
+        epipoles.append(torch.tensor(e))
+        #epipoles.append(torch.tensor(scipy.linalg.null_space(this_F_mats[b].T.cpu().numpy())))
+    unnorm_epipoles = torch.stack(epipoles)
+    return unnorm_epipoles
+    #return unnorm_epipoles.squeeze() / unnorm_epipoles[:, -1]
+
+
 def epipolar_distance(that_corr_grid, this_F_mats, mesh_grids, args):
     # produces a h x w map of epipolar error for the given motion model
     sed = sampson_epipolar_distance(mesh_grids.flatten(1, 2), that_corr_grid.flatten(1, 2), this_F_mats).reshape((mesh_grids.shape[0], mesh_grids.shape[1], mesh_grids.shape[2]))
@@ -1036,17 +1090,6 @@ def epipolar_distance(that_corr_grid, this_F_mats, mesh_grids, args):
         sed[b] -= sed[b].mean()
     return sed #einops.rearrange(torch.stack(seds), 'i b h w -> b i h w')
 
-
-def calculate_epipoles(this_F_mats):
-    epipoles = []
-    for b in range(this_F_mats.shape[0]):
-        U, S, V = np.linalg.svd(this_F_mats[b].cpu().numpy())
-        e = V[-1] / V[-1, -1]
-        epipoles.append(torch.tensor(e))
-        #epipoles.append(torch.tensor(scipy.linalg.null_space(this_F_mats[b].T.cpu().numpy())))
-    unnorm_epipoles = torch.stack(epipoles)
-    return unnorm_epipoles
-    #return unnorm_epipoles.squeeze() / unnorm_epipoles[:, -1]
 
 def flow_above_mean(sed):
     #sed = (torch.linalg.vector_norm(this_flow, dim=-1).float() + 1e-5)

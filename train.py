@@ -140,6 +140,9 @@ def run_epoch(loader, net, scaler, optimizer, scheduler, epoch, args, is_train=T
             if args.dataset == 'playroom':
                 now_future_F_mat = torch.zeros((now_people.shape[0], 3, 3)).float().cuda()
                 future_now_F_mat = torch.zeros((now_people.shape[0], 3, 3)).float().cuda()
+            elif args.motion_model == 'cv2':
+                now_future_F_mat, _ = cv2_fit_motion_model(now_rgb, future_rgb)
+                future_now_F_mat, _ = cv2_fit_motion_model(future_rgb, now_rgb)
             else:
                 now_future_F_mat, _ = fit_motion_model(~now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, 1.0, mesh_grids, args)
                 future_now_F_mat, _ = fit_motion_model(~future_people, future_now_cycle_inconsistent, future_now_corr_grid, ransac, 1.0, mesh_grids, args)

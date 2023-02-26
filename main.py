@@ -461,6 +461,7 @@ if __name__ == "__main__":
     parser.add_argument('--congealing_method', type=str, default='spatial', help='whether spatial or feature outlier congealing')
     parser.add_argument('--pseudolabels', type=str, default='MOVES', help='whether to use MOVES or CIS')
     parser.add_argument('--flow', type=str, default='gma', help='whether to use GMA or PWC')
+    parser.add_argument('--motion_model', type=str, default='kornia', help='whether to use kornia or cv2')
 
     # optimization parameters
     parser.add_argument('--lr', type=float, default=1e-4, help='what lr')
