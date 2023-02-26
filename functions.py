@@ -980,7 +980,6 @@ def fit_motion_model(mask, cycle_inconsistent, that_corr_grid, ransac, acceptabl
         ptsA = (mesh_grids[b][pts_mask]).float()
         ptsB = (that_corr_grid[b][pts_mask]).float()
         pts = random.sample(range(0, ptsA.shape[0]), min(2500, ptsA.shape[0]))
-        pdb.set_trace()
 
         F_mat, inlier_mask = ransac.forward(ptsA[pts], ptsB[pts])
 

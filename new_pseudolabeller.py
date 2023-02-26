@@ -121,7 +121,7 @@ if __name__ == "__main__":
     valid_data = Coherence_Dataset(valid_frames, dataset, data_path, img_size)
 
     #train_loader = DataLoader(train_data, batch_size=batch_size, num_workers=0 if ddp else 2)#, sampler=train_sampler)#, pin_memory=True)
-    valid_loader = DataLoader(valid_data, batch_size=batch_size, num_workers=0 if ddp else 2)#, sampler=valid_sampler)#, pin_memory=True)
+    valid_loader = DataLoader(valid_data, batch_size=batch_size, num_workers=0 if ddp else 0)#, sampler=valid_sampler)#, pin_memory=True)
 
     mesh_grids = torch.stack(list(torch.meshgrid(torch.linspace(-1, 1, steps=img_size[1]), torch.linspace(-1, 1, img_size[0]), indexing='xy')))
     mesh_grids = einops.repeat(mesh_grids, 'c h w -> b h w c', b=batch_size).cuda(non_blocking=True)
@@ -205,48 +205,51 @@ if __name__ == "__main__":
             img2 = inv_normalize(future_rgb[b]).permute(1, 2, 0).detach().cpu().numpy()
 
             # Compute the epipolar lines in image 1 that correspond to points in image 2
-            points1 = np.array([[500, 50], [250, 100], [50, 500], [100, 250], [600, 600]])
+            points1 = [[500, 50], [250, 100], [50, 500], [100, 250], [600, 600]]
 
             # Compute corresponding epilines in image 2
-            #lines1 = cv2.computeCorrespondEpilines(points1.reshape(-1, 1, 2), 2, that_F).reshape(-1, 3)
-            #lines2 = cv2.computeCorrespondEpilines(points1.reshape(-1, 1, 2), 1, this_F).reshape(-1, 3)
-
-            # TODO just need to convert pts to -1 to 1
+            # just need to convert pts to -1 to 1
+            points1 = np.array([(x / 324 - 1.0, y / 432 - 1.0) for (x, y) in points1])
 
             def drawlines(img1,img2,lines,pts1,pts2):
                 ''' img1 - image on which we draw the epilines for the points in img2
                     lines - corresponding epilines '''
-                r,c,_ = img1.shape
+                rr,c,_ = img1.shape
                 #img1 = cv2.cvtColor(img1,cv2.COLOR_GRAY2BGR)
                 #img2 = cv2.cvtColor(img2,cv2.COLOR_GRAY2BGR)
                 img1 = cv2.cvtColor(np.uint8(img1*255), cv2.COLOR_RGB2BGR)  # convert numpy array to OpenCV image
                 img2 = cv2.cvtColor(np.uint8(img2*255), cv2.COLOR_RGB2BGR)
                 for r,pt1,pt2 in zip(lines,pts1,pts2):
-                    pdb.set_trace()
                     color = tuple(np.random.randint(0,255,3).tolist())
-                    x0,y0 = map(int, [0, -r[2]/r[1] ])
-                    x1,y1 = map(int, [c, -(r[2]+r[0]*c)/r[1] ])
+                    x0,y0 = map(float, [-1, -r[2]/r[1] ])
+                    x1,y1 = map(float, [1, -(r[2]+r[0]*2)/r[1] ])
+
+                    x0, y0 = int((x0 + 1.0) * 324), int((y0 + 1.0) * 432)
+                    x1, y1 = int((x1 + 1.0) * 324), int((y1 + 1.0) * 432)
+
                     img1 = cv2.line(img1, (x0,y0), (x1,y1), color,3)
                     img1 = cv2.circle(img1,tuple(pt1),5,color,-3)
                     img2 = cv2.circle(img2,tuple(pt2),5,color,-3)
                 return img1,img2
 
-            pts1 = np.int32(points1)
-            pts2 = np.int32(points1)
+            pts1 = np.int32([((x + 1.0) * 324, (y + 1.0) * 432) for (x, y) in points1])
+            pts2 = np.int32([((x + 1.0) * 324, (y + 1.0) * 432) for (x, y) in points1])
 
             # Find epilines corresponding to points in right image (second image) and
             # drawing its lines on left image
-            lines1 = cv2.computeCorrespondEpilines(pts2.reshape(-1,1,2), 2, this_F)
+            pdb.set_trace()
+            lines1 = cv2.computeCorrespondEpilines(points1.reshape(-1,1,2), 2, this_F)
             lines1 = lines1.reshape(-1,3)
             img5,img6 = drawlines(img1,img2,lines1,pts1,pts2)
 
             # Find epilines corresponding to points in left image (first image) and
             # drawing its lines on right image
-            lines2 = cv2.computeCorrespondEpilines(pts1.reshape(-1,1,2), 1, this_F)
+            lines2 = cv2.computeCorrespondEpilines(points1.reshape(-1,1,2), 1, that_F)
             lines2 = lines2.reshape(-1,3)
             img3,img4 = drawlines(img2,img1,lines2,pts2,pts1)
 
             # Save the image with the epipolar lines drawn
+            # --------------------------------------------
             my_seeem.store_image(img5, 'epipolar', i*batch_size+b, option='cv2')
             my_seeem.store_image(now_rgb[b], 'rgb', i*batch_size+b, option='rgb')
             my_seeem.store_image(now_future_flow[b], 'flow', i*batch_size+b, option='flow')
