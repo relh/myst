@@ -106,7 +106,7 @@ if __name__ == "__main__":
         object_threshold = 0.88
 
     ddp = False
-    batch_size = 15
+    batch_size = 25
     args = {'fps_offset_mult': fps_offset_mult, 'offset': 10}
     args = Struct(**args)
     args.ransac_threshold = 3.3e-7 * args.offset * args.fps_offset_mult
@@ -169,8 +169,11 @@ if __name__ == "__main__":
             H_inv = np.linalg.inv(H)
             H_inv_transpose = H_inv.T
 
-            F = torch.tensor(that_F).float()
-            F = np.array(F)
+            this_F = torch.tensor(this_F).float()
+            that_F = torch.tensor(that_F).float()
+
+            this_F = np.array(this_F)
+            that_F = np.array(that_F)
 
             pts_nonnorm = np.array([[50, 50], [500, 50], [50, 500], [500, 500], [250, 250], [800, 50], [800, 600]])
 
@@ -179,10 +182,14 @@ if __name__ == "__main__":
 
             # Compute the epipolar lines on the right image
             #epilines_norm = F @ np.hstack((points_left, np.ones((points_left.shape[0], 1)))).T
-            lines_norm = cv2.computeCorrespondEpilines(pts_norm.reshape(-1, 1, 2), 2, F)
-            lines_norm = lines_norm.reshape(-1, 3)
+            this_lines_norm = cv2.computeCorrespondEpilines(pts_norm.reshape(-1, 1, 2), 2, that_F)
+            that_lines_norm = cv2.computeCorrespondEpilines(pts_norm.reshape(-1, 1, 2), 2, this_F)
 
-            lines_nonnorm = (H_inv_transpose @ lines_norm.T).T
+            this_lines_norm = this_lines_norm.reshape(-1, 3)
+            that_lines_norm = that_lines_norm.reshape(-1, 3)
+
+            this_lines_nonnorm = (H_inv_transpose @ this_lines_norm.T).T
+            that_lines_nonnorm = (H_inv_transpose @ that_lines_norm.T).T
 
             img1 = inv_normalize(now_rgb[b].clone()).permute(1, 2, 0).detach().cpu().numpy()  # convert PyTorch tensor to numpy array
             img2 = inv_normalize(future_rgb[b].clone()).permute(1, 2, 0).detach().cpu().numpy()
@@ -191,16 +198,20 @@ if __name__ == "__main__":
             img_right = cv2.cvtColor(np.uint8(img2*255), cv2.COLOR_RGB2BGR)
 
             # Draw the epipolar lines and line segments on the right image
-            for point, line in zip(pts_nonnorm, lines_nonnorm):
+            for point, this_line, that_line in zip(pts_nonnorm, this_lines_nonnorm, that_lines_nonnorm):
                 color = tuple(np.random.randint(0, 255, size=3).tolist())  # Random color for each line
-                x0, y0 = map(int, [0, -line[2]/line[1]])
-                x1, y1 = map(int, [img_right.shape[1], -(line[2]+line[0]*img_right.shape[1])/line[1]])
+                x0, y0 = map(int, [0, -this_line[2]/this_line[1]])
+                x1, y1 = map(int, [img_right.shape[1], -(this_line[2]+this_line[0]*img_right.shape[1])/this_line[1]])
                 cv2.line(img_right, (x0, y0), (x1, y1), color, 3)
                 cv2.circle(img_right, tuple(point), 5, color, -3)
+
+                x0, y0 = map(int, [0, -that_line[2]/that_line[1]])
+                x1, y1 = map(int, [img_right.shape[1], -(that_line[2]+that_line[0]*img_right.shape[1])/that_line[1]])
+                cv2.line(img_left, (x0, y0), (x1, y1), color, 3)
                 cv2.circle(img_left, tuple(point), 5, color, -3)
 
-            norm_now_future_epipoles = scipy.linalg.null_space(F)# / scipy.linalg.null_space(F)[-1]
-            norm_future_now_epipoles = scipy.linalg.null_space(F.T)# / scipy.linalg.null_space(F.T)[-1]
+            norm_now_future_epipoles = scipy.linalg.null_space(this_F)# / scipy.linalg.null_space(F)[-1]
+            norm_future_now_epipoles = scipy.linalg.null_space(that_F)# / scipy.linalg.null_space(F.T)[-1]
 
             now_future_epipoles = np.dot(H, norm_now_future_epipoles)
             now_future_epipoles /= now_future_epipoles[2]
