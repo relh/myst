@@ -4,6 +4,7 @@ import os
 
 os.environ['DECORD_EOF_RETRY_MAX'] = str(20480)
 
+import nevergrad as ng
 import gc
 import getopt
 import glob
@@ -106,7 +107,7 @@ if __name__ == "__main__":
         object_threshold = 0.88
 
     ddp = False
-    batch_size = 25
+    batch_size = 50
     args = {'fps_offset_mult': fps_offset_mult, 'offset': 10}
     args = Struct(**args)
     args.ransac_threshold = 3.3e-7 * args.offset * args.fps_offset_mult
@@ -126,8 +127,8 @@ if __name__ == "__main__":
     mesh_grids = torch.stack(list(torch.meshgrid(torch.linspace(-1, 1, steps=img_size[1]), torch.linspace(-1, 1, img_size[0]), indexing='xy')))
     mesh_grids = einops.repeat(mesh_grids, 'c h w -> b h w c', b=batch_size).cuda(non_blocking=True)
 
-    ransac = RANSAC(model_type='fundamental', inl_th=args.ransac_threshold, batch_size=4096, max_iter=5, confidence=0.99999, max_lo_iters=5)
-    my_seeem = seeem.WebPage('/home/relh/public_html/experiments/test_new_epipoles_v9/index.html')
+    #ransac = RANSAC(model_type='fundamental', inl_th=0.010, batch_size=4096, max_iter=25, confidence=0.999999, max_lo_iters=25)
+    my_seeem = seeem.WebPage('/home/relh/public_html/experiments/test_new_epipoles_v12/index.html')
 
     for i, batch in enumerate(valid_loader):
         now_future_flow = batch['now']['flow_n_f'].cuda(non_blocking=True).float()
@@ -150,16 +151,103 @@ if __name__ == "__main__":
 
         #alt_now_future_F_mat, _ = cv2_fit_motion_model(now_rgb, future_rgb, ~now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, 1.0, mesh_grids, args)
         #alt_future_now_F_mat, _ = cv2_fit_motion_model(future_rgb, now_rgb, ~future_people, future_now_cycle_inconsistent, future_now_corr_grid, ransac, 1.0, mesh_grids, args)
+        confidences = [0.999, 0.9999, 0.99999, 0.999999, 0.9999999]
+        max_lo_iters = [1, 5, 10, 15, 20, 25, 50]
+        max_iters = [1, 5, 10, 15, 20, 25, 50]
+        batch_sizes = [512, 1024, 2096, 4096, 8100]
+        ransac_thresholds = [3.3e-7, 1e-7, 1e-6, 1e-8]
+        ransac_thresholds = [x * args.offset * args.fps_offset_mult for x in ransac_thresholds]
+
+        def ransac_tune(bs: int, mli: int, mi: int, c: float, rt: float) -> float:
+            # optimal for learning_rate=0.2, batch_size=4, architecture="conv"
+            ransac = RANSAC(model_type='fundamental', inl_th=rt, batch_size=bs, max_iter=mi, confidence=c, max_lo_iters=mli)
+            now_future_F_mat, _ = fit_motion_model(~now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, 1.0, mesh_grids, args)
+            future_now_F_mat, _ = fit_motion_model(~future_people, future_now_cycle_inconsistent, future_now_corr_grid, ransac, 1.0, mesh_grids, args)
+
+            diff = []
+            for b in range(now_rgb.shape[0]):
+                that_F = future_now_F_mat[b].detach().cpu().numpy()
+                this_F = now_future_F_mat[b].detach().cpu().numpy()
+
+                diff.append((abs(this_F.T - that_F)).sum())
+            return diff
+
+        # Instrumentation class is used for functions with multiple inputs
+        # (positional and/or keywords)
+        '''
+        parametrization = ng.p.Instrumentation(
+            bs=ng.p.Scalar(lower=512, upper=8000).set_integer_casting(),
+            mli=ng.p.Scalar(lower=1, upper=50).set_integer_casting(),
+            mi=ng.p.Scalar(lower=1, upper=50).set_integer_casting(),
+            c=ng.p.Scalar(lower=0.999, upper=0.99999999),
+            rt=ng.p.Scalar(lower=1e-7, upper=1e-3),
+        )
+        '''
+        #bs = 8400
+        #mli = 97
+        #mi = 64
+        #c = 0.9997846007267676 
+        #rt = 2.5163064521501138e-05
+
+        #bs = 1412
+        #mli = 18
+        #mi = 64
+        #c = 0.9992188484015111
+        #rt = 1.2368851783195201e-07
+
+        #bs = 4096 
+        #mi = 25 
+        #mli = 25 
+        #c = 0.999999
+        #rt = 3.3e-7 * args.offset * args.fps_offset_mult
+
+        bs = 8096
+        mi = 1000
+        mli = 100
+        c = 0.9999999
+        rt = 0.5
+        #3.3e-8 * args.offset * args.fps_offset_mult 
+
+        #optimizer = ng.optimizers.NGOpt(parametrization=parametrization, budget=100)
+        #recommendation = optimizer.minimize(ransac_tune)
+
+        #print(recommendation.kwargs)  # shows the recommended keyword arguments of the function
+        # >>> {'learning_rate': 0.1998, 'batch_size': 4, 'architecture': 'conv'}
+
+        #pdb.set_trace()
+        #Instrumentation(Tuple(),Dict(bs=Scalar{Cl(512,10000,b),Int}[sigma=Scalar{exp=2.03}],c=Scalar{Cl(0.999,0.999999999,b)}[sigma=Scalar{exp=2.03}],mi=Scalar{Cl(1,100,b),Int}[sigma=Scalar{exp=2.03}],mli=Scalar{Cl(1,100,b),Int}[sigma=Scalar{exp=2.03}],rt=Log{Cl(-12.000000000000002,-6.000000000000002,b),exp=4.64})):((), 
+        #{'bs': 1412, 'mli': 18, 'mi': 64, 'c': 0.9992188484015111,
+        #'rt': 1.2368851783195201e-07}) with losses 371854.70301332476
+
+        # least impact to most 
+        smallest_diff = sys.maxsize
+        '''
+        for bs in batch_sizes:
+            for mli in max_lo_iters:
+                for mi in max_iters:
+                    for c in confidences:
+                        for rt in ransac_thresholds:
+        '''
+        ransac = RANSAC(model_type='fundamental', inl_th=rt, batch_size=bs, max_iter=mi, confidence=c, max_lo_iters=mli)
         now_future_F_mat, _ = fit_motion_model(~now_people, now_future_cycle_inconsistent, now_future_corr_grid, ransac, 1.0, mesh_grids, args)
         future_now_F_mat, _ = fit_motion_model(~future_people, future_now_cycle_inconsistent, future_now_corr_grid, ransac, 1.0, mesh_grids, args)
 
+        diff = []
         for b in range(now_rgb.shape[0]):
-            #alt_this_F = alt_now_future_F_mat[b].detach().cpu().numpy()
-            #alt_that_F = alt_future_now_F_mat[b].detach().cpu().numpy()
-
-            this_F = now_future_F_mat[b].detach().cpu().numpy()
             that_F = future_now_F_mat[b].detach().cpu().numpy()
+            this_F = now_future_F_mat[b].detach().cpu().numpy()
+            diff.append((abs(this_F.T - that_F)).sum())
 
+        sum_diff = sum(diff)
+        if sum_diff < smallest_diff:
+            smallest_diff = sum_diff
+            print(f'rt: {rt}, c: {c}, mli: {mli}, mi: {mi}, bs: {bs}, sd: {sum_diff}')
+
+        for b in range(now_rgb.shape[0]):
+            that_F = future_now_F_mat[b].detach().cpu().numpy()
+            this_F = now_future_F_mat[b].detach().cpu().numpy()
+
+            '''
             h, w = 648.0, 864.0
 
             sx, sy = w/2.0, h/2.0
@@ -168,28 +256,29 @@ if __name__ == "__main__":
             H = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
             H_inv = np.linalg.inv(H)
             H_inv_transpose = H_inv.T
-
-            this_F = torch.tensor(this_F).float()
-            that_F = torch.tensor(that_F).float()
-
-            this_F = np.array(this_F)
-            that_F = np.array(that_F)
+            '''
 
             pts_nonnorm = np.array([[50, 50], [500, 50], [50, 500], [500, 500], [250, 250], [800, 50], [800, 600]])
 
             # Normalized pixel coordinates of correspondences
-            pts_norm = (H_inv @ np.hstack((pts_nonnorm, np.ones((pts_nonnorm.shape[0], 1)))).T).T[:,:2]
+            #pts_norm = (H_inv @ np.hstack((pts_nonnorm, np.ones((pts_nonnorm.shape[0], 1)))).T).T[:,:2]
 
             # Compute the epipolar lines on the right image
             #epilines_norm = F @ np.hstack((points_left, np.ones((points_left.shape[0], 1)))).T
-            this_lines_norm = cv2.computeCorrespondEpilines(pts_norm.reshape(-1, 1, 2), 2, that_F)
-            that_lines_norm = cv2.computeCorrespondEpilines(pts_norm.reshape(-1, 1, 2), 2, this_F)
 
+            this_F = torch.tensor(this_F).float()
+            this_F = np.array(this_F)
+            this_lines_norm = cv2.computeCorrespondEpilines(pts_nonnorm.reshape(-1, 1, 2), 2, that_F)
             this_lines_norm = this_lines_norm.reshape(-1, 3)
-            that_lines_norm = that_lines_norm.reshape(-1, 3)
+            this_lines_nonnorm = (this_lines_norm.T).T
+            #this_lines_nonnorm = (H_inv_transpose @ this_lines_norm.T).T
 
-            this_lines_nonnorm = (H_inv_transpose @ this_lines_norm.T).T
-            that_lines_nonnorm = (H_inv_transpose @ that_lines_norm.T).T
+            that_F = torch.tensor(that_F).float()
+            that_F = np.array(that_F)
+            that_lines_norm = cv2.computeCorrespondEpilines(pts_nonnorm.reshape(-1, 1, 2), 2, this_F)
+            that_lines_norm = that_lines_norm.reshape(-1, 3)
+            that_lines_nonnorm = (that_lines_norm.T).T
+            #that_lines_nonnorm = (H_inv_transpose @ that_lines_norm.T).T
 
             img1 = inv_normalize(now_rgb[b].clone()).permute(1, 2, 0).detach().cpu().numpy()  # convert PyTorch tensor to numpy array
             img2 = inv_normalize(future_rgb[b].clone()).permute(1, 2, 0).detach().cpu().numpy()
@@ -210,13 +299,13 @@ if __name__ == "__main__":
                 cv2.line(img_left, (x0, y0), (x1, y1), color, 3)
                 cv2.circle(img_left, tuple(point), 5, color, -3)
 
-            norm_now_future_epipoles = scipy.linalg.null_space(this_F)# / scipy.linalg.null_space(F)[-1]
-            norm_future_now_epipoles = scipy.linalg.null_space(that_F)# / scipy.linalg.null_space(F.T)[-1]
+            now_future_epipoles = scipy.linalg.null_space(this_F)# / scipy.linalg.null_space(F)[-1]
+            future_now_epipoles = scipy.linalg.null_space(that_F)# / scipy.linalg.null_space(F.T)[-1]
 
-            now_future_epipoles = np.dot(H, norm_now_future_epipoles)
+            #now_future_epipoles = np.dot(H, norm_now_future_epipoles)
             now_future_epipoles /= now_future_epipoles[2]
 
-            future_now_epipoles = np.dot(H, norm_future_now_epipoles)
+            #future_now_epipoles = np.dot(H, norm_future_now_epipoles)
             future_now_epipoles /= future_now_epipoles[2]
 
             now_future_epipoles = tuple(now_future_epipoles.T[0][:2].astype(int))

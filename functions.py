@@ -967,6 +967,13 @@ def rebase_components(this_label, that_label):
 def fit_motion_model(mask, cycle_inconsistent, that_corr_grid, ransac, acceptable, mesh_grids, args):
     # fits a motion model between two frames, within mask pixels
     all_F_mats, all_inl = [], []
+
+    h, w = 648.0, 864.0
+    sx, sy = w/2.0, h/2.0
+    tx, ty = w/2.0, h/2.0
+    H = np.array([[sx, 0, tx], [0, sy, ty], [0, 0, 1]])
+    H = torch.tensor(H).cuda().float()
+
     for b in range(that_corr_grid.shape[0]):
         pts_mask = (~cycle_inconsistent[b] & mask[b])
 
@@ -978,9 +985,14 @@ def fit_motion_model(mask, cycle_inconsistent, that_corr_grid, ransac, acceptabl
 
         ptsA = (mesh_grids[b][pts_mask]).float()
         ptsB = (that_corr_grid[b][pts_mask]).float()
-        pts = random.sample(range(0, ptsA.shape[0]), min(2500, ptsA.shape[0]))
+        pts = random.sample(range(0, ptsA.shape[0]), min(10000, ptsA.shape[0]))
 
-        F_mat, inlier_mask = ransac.forward(ptsA[pts], ptsB[pts])
+        pts_A_unnorm = (H @ torch.hstack((ptsA[pts], torch.ones((ptsA[pts].shape[0], 1)).cuda())).T).T[:,:2]
+        pts_B_unnorm = (H @ torch.hstack((ptsB[pts], torch.ones((ptsB[pts].shape[0], 1)).cuda())).T).T[:,:2]
+
+        F_mat, inlier_mask = ransac.forward(pts_A_unnorm, pts_B_unnorm)
+        print(float(sum(inlier_mask) / len(pts)))
+        #F_mat, inlier_mask = ransac.forward(ptsA[pts], ptsB[pts])
 
         # ensure good fit
         errors = ransac.error_fn(mesh_grids[b], that_corr_grid[b], einops.repeat(F_mat, 'h w -> c h w', c=1))
