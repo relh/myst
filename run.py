@@ -13,26 +13,35 @@ import numpy as np
 import rerun as rr  # pip install rerun-sdk
 import torch
 import torch.nn.functional as F
-from ek_fields_utils.colmap_rw_utils import read_model
+from diffusers import StableDiffusionInpaintPipeline
 from PIL import Image
 from transformers import pipeline
 
+from ek_fields_utils.colmap_rw_utils import read_model
 from utils import *
 
 
 def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, resize: tuple[int, int] | None) -> None:
     print("Reading sparse COLMAP reconstruction")
-    cameras, images, sparse_points3D = read_model(dataset_path / "old_dense", ext=".bin")
-    points3D, colors = load_dense_point_cloud(str(dataset_path) + "/dense/fused.ply")
+    cameras, images, sparse_points3d = read_model(dataset_path / "old_dense", ext=".bin")
+    dense_points3d, colors = load_dense_point_cloud(str(dataset_path) + "/dense/fused.ply")
 
     if filter_output:
         # Filter out noisy points
-        sparse_points3D = {id: point for id, point in sparse_points3D.items() if point.rgb.any() and len(point.image_ids) > 4}
+        sparse_points3d = {id: point for id, point in sparse_points3d.items() if point.rgb.any() and len(point.image_ids) > 4}
 
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
     rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
     pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-large-hf", device="cuda:0")
     image_file = None
+
+    #inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained("runwayml/stable-diffusion-inpainting")
+    #inpaint_pipe = inpaint_pipe.to("cpu")
+    #prompt = "Face of a yellow cat, high resolution, sitting on a park bench"
+    #image and mask_image should be PIL images.
+    #The mask structure is white for inpainting and black for keeping as is
+    #image = inpaint_pipe(prompt=prompt, image=image, mask_image=mask_image).images[0]
+    #image.save("./yellow_cat_on_park_bench.png")
 
     # Iterate through images (video frames) logging data related to each frame.
     num_images = len(images.values())
@@ -50,17 +59,51 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         fx, fy, cx, cy, k1, k2, p1, p2 = camera.params
         intrinsics = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]).float()
         extrinsics = get_camera_extrinsic_matrix(image)
-        projected_points, sparse_depth = points_3d_to_image(points3D, intrinsics, extrinsics, (camera.height, camera.width))
-        est_depth = F.interpolate(pipe(img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
-        aligned_depth, _ = ransac_alignment(est_depth.unsqueeze(0), sparse_depth.unsqueeze(0))
-        point_cloud, pc_colors = depth_to_points_3d(aligned_depth.squeeze(), intrinsics, extrinsics, torch.tensor(np.array(img)))
+        proj_colmap, colmap_depth, vis_colmap_3d, vis_colmap_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask=None)
+        da_depth = F.interpolate(pipe(img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
+        aligned_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
+
+        da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, torch.tensor(np.array(img)))
+        proj_da, _, vis_da_3d, vis_da_colors = points_3d_to_image(da_3d, da_colors, intrinsics, extrinsics, (camera.height, camera.width))
+
+        # Optimizing the image creation process using smart indexing in PyTorch
+
+        # Initialize a black image of size (256, 456, 3)
+        image_size = (256, 456, 3)
+        image = torch.zeros(image_size, dtype=torch.uint8).cuda()
+
+        # Convert proj_da to integer and clamp to image size
+        proj_da = proj_da.long()
+        proj_da[:, 0] = proj_da[:, 0].clamp(0, image_size[1] - 1)
+        proj_da[:, 1] = proj_da[:, 1].clamp(0, image_size[0] - 1)
+
+        # Using advanced indexing to directly place colors at the projected points
+        image[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
+
+        #mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
+        #image = Image.fromarray(image.cpu().numpy())
+        #mask_image.save('./mask_image.png', format='PNG')
+        #image.save('./image.png', format='PNG')
+
+        mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
+        new_image = fill_missing_values_batched(image, mask_image)
+
+        #image = inpaint_pipe(prompt='a scene from epic kitchens', image=image, mask_image=mask_image).images[0]
+        #del inpaint_pipe
+        #breakpoint()
+
+        # Visualizing the optimized generated image
+        #new_image = new_image / 255.0
+        #plt.imshow(new_image.cpu().numpy())
+        #plt.axis('off')
+        #plt.show()
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
-        #rr.log("dense_points", rr.Points3D(points3D, colors=colors))
+        #rr.log("dense_points", rr.Points3D(dense_points3d, colors=colors))
 
-        rr.log("now_points", rr.Points3D(point_cloud.cpu().numpy(), colors=[99, 99, 99]))
-        rr.log("camera/image/dense_keypoints", rr.Points2D(projected_points.cpu().numpy(), colors=[167, 138, 34]))
+        rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=[99, 99, 99]))
+        rr.log("camera/image/dense_keypoints", rr.Points2D(proj_da.cpu().numpy(), colors=[167, 138, 34]))
 
         # COLMAP's camera transform is "camera from world"
         rr.log("camera", rr.Transform3D(translation=image.tvec, rotation=rr.Quaternion(xyzw=quat_xyzw), from_parent=True))

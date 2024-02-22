@@ -33,15 +33,15 @@ def scale_camera(camera: Camera, resize: tuple[int, int]) -> tuple[Camera, npt.N
 
 def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, resize: tuple[int, int] | None) -> None:
     print("Reading sparse COLMAP reconstruction")
-    cameras, images, sparse_points3D = read_model(dataset_path / "old_dense", ext=".bin")
-    points3D, colors = load_dense_point_cloud(str(dataset_path) + "/dense/fused.ply")
+    cameras, images, sparse_points3d = read_model(dataset_path / "old_dense", ext=".bin")
+    dense_points3d, colors = load_dense_point_cloud(str(dataset_path) + "/dense/fused.ply")
 
     hand_obj_mask_path = './assets/P01_04/hands23/masks/'
     hand_masks = [hand_obj_mask_path + x for x in os.listdir(hand_obj_mask_path) if x.startswith('2_')]
 
     if filter_output:
         # Filter out noisy points
-        sparse_points3D = {id: point for id, point in sparse_points3D.items() if point.rgb.any() and len(point.image_ids) > 4}
+        sparse_points3d = {id: point for id, point in sparse_points3d.items() if point.rgb.any() and len(point.image_ids) > 4}
 
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
     rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
@@ -82,20 +82,20 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         else:
             this_mask = torch.zeros((256, 456)).cuda()
 
-        projected_points, sparse_depth = points_3d_to_image(points3D, intrinsics, extrinsics, (camera.height, camera.width), this_mask)
+        proj_colmap, colmap_depth, vis_colmap_3d, vis_colmap_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask)
         
         img = Image.open(str(image_file))
-        est_depth = F.interpolate(pipe(img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
+        da_depth = F.interpolate(pipe(img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
 
-        aligned_depth, _ = ransac_alignment(est_depth.unsqueeze(0), sparse_depth.unsqueeze(0))
-        #aligned_depth = adjust_disparity(est_depth.squeeze(), sparse_depth.squeeze())
+        aligned_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
+        #aligned_da_depth = adjust_disparity(da_depth.squeeze(), colmap_depth.squeeze())
 
-        point_cloud, pc_colors = depth_to_points_3d(aligned_depth.squeeze(), intrinsics, extrinsics, torch.tensor(np.array(img)))
+        da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, torch.tensor(np.array(img)))
 
-        visible = [id != -1 and sparse_points3D.get(id) is not None for id in image.point3D_ids]
-        visible_ids = image.point3D_ids[visible]
+        visible = [id != -1 and sparse_points3d.get(id) is not None for id in image.point3D_ids]
+        visible_ids = image.point3d_ids[visible]
 
-        visible_xyzs = [sparse_points3D[id] for id in visible_ids]
+        visible_xyzs = [sparse_points3d[id] for id in visible_ids]
         visible_xys = image.xys[visible]
         if resize:
             visible_xys *= scale_factor
@@ -106,12 +106,12 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", frame_idx)
-        rr.log("dense_points", rr.Points3D(points3D, colors=colors))
+        rr.log("dense_points", rr.Points3D(dense_points3d, colors=colors))
 
         rr.log("plot/avg_reproj_err", rr.Scalar(np.mean(point_errors)))
 
         rr.log("points", rr.Points3D(points, colors=point_colors), rr.AnyValues(error=point_errors))
-        rr.log("now_points", rr.Points3D(point_cloud.cpu().numpy(), colors=[99, 99, 99]))
+        rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=[99, 99, 99]))
 
         # COLMAP's camera transform is "camera from world"
         rr.log("camera", rr.Transform3D(translation=image.tvec, rotation=rr.Quaternion(xyzw=quat_xyzw), from_parent=True))
@@ -136,7 +136,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
             rr.log("camera/image", rr.ImageEncoded(path=dataset_path / "images" / image.name))
 
         rr.log("camera/image/keypoints", rr.Points2D(visible_xys, colors=[34, 138, 167]))
-        rr.log("camera/image/dense_keypoints", rr.Points2D(projected_points.cpu().numpy(), colors=[167, 138, 34]))
+        rr.log("camera/image/dense_keypoints", rr.Points2D(proj_colmap.cpu().numpy(), colors=[167, 138, 34]))
 
 
 def main() -> None:

@@ -17,7 +17,7 @@ import rerun as rr  # pip install rerun-sdk
 import torch
 import torch.nn.functional as F
 from decord import VideoReader
-from einops import rearrange
+from einops import rearrange, repeat
 from imageio import get_writer
 from matplotlib import pyplot as plt
 from PIL import Image
@@ -29,6 +29,39 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 
 torch.set_default_dtype(torch.float32)
 torch.set_default_device('cuda')
+
+
+def fill_missing_values_batched(image, mask):
+    # Ensure image is in float and mask is repeated for each channel
+    image = image.float()
+    mask = repeat(mask, 'h w -> h w c', c=3).float()
+
+    # Invert the mask for processing: 1 for valid pixels, 0 for missing
+    valid_mask = 1 - mask
+
+    # Define a 3x3 kernel for convolution
+    kernel = torch.ones((3, 1, 3, 3), dtype=torch.float32)
+
+    # Rearrange image and valid_mask for convolution
+    image_batch = rearrange(image, 'h w c -> (1) c h w')
+    valid_mask_batch = rearrange(valid_mask, 'h w c -> (1) c h w')
+
+    # Convolve image and valid_mask with the kernel
+    sum_neighbors = F.conv2d(image_batch * valid_mask_batch, kernel, padding=1, groups=3)
+    count_neighbors = F.conv2d(valid_mask_batch, kernel, padding=1, groups=3)
+
+    # Normalize sum by the count of valid neighbors
+    average_values = sum_neighbors / count_neighbors.clamp(min=1)
+
+    # Replace missing pixels
+    mask_missing = rearrange(mask, 'h w c -> (1) c h w') == 1
+    image_filled = torch.where(mask_missing, average_values, image_batch)
+
+    # Clamp values to the valid range (assuming 8-bit image)
+    image_filled = image_filled.clamp(0, 255)
+
+    return rearrange(image_filled, '(1) c h w -> h w c')
+
 
 def compute_local_median_scaling(estimated_disparity, colmap_depth, window_size=5):
     """
@@ -143,7 +176,7 @@ def get_camera_extrinsic_matrix(image):
     T[:3, 3] = torch.tensor(image.tvec)
     return T
 
-def points_3d_to_image(points_3d, intrinsics, extrinsics, image_shape, this_mask=None):
+def points_3d_to_image(points_3d, colors, intrinsics, extrinsics, image_shape, this_mask=None):
     points_3d = torch.tensor(points_3d).float()
     points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1)), dim=1).T
     camera_coords = extrinsics @ points_homogeneous
@@ -168,7 +201,8 @@ def points_3d_to_image(points_3d, intrinsics, extrinsics, image_shape, this_mask
     depth_map = torch.full(image_shape, float('inf'))
     depth_map[y_pixels[unocc], x_pixels[unocc]] = torch.min(depth_map[y_pixels[unocc], x_pixels[unocc]], proj_pts[2][unocc])
     depth_map[depth_map == float('inf')] = 0
-    return im_proj_pts.T[unocc][:, :2], depth_map
+
+    return im_proj_pts.T[unocc][:, :2], depth_map, points_3d[visible][unocc], (None if colors is None else colors[visible][unocc])
 
 def load_dense_point_cloud(ply_file_path: str):
     point_cloud = o3d.io.read_point_cloud(ply_file_path)
@@ -191,4 +225,3 @@ def depth_to_points_3d(depth_map, K, E, image=None):
 
 if __name__ == "__main__":
     pass
-
