@@ -161,6 +161,8 @@ def points_3d_to_image(points_3d, intrinsics, extrinsics, image_shape, this_mask
     y_pixels = y_pixels[visible]
     proj_pts = proj_pts[:, visible]
     im_proj_pts = im_proj_pts[:, visible]
+
+    if this_mask == None: this_mask = torch.zeros((256, 456))
     unocc = this_mask[y_pixels, x_pixels] == 0
 
     depth_map = torch.full(image_shape, float('inf'))
@@ -172,13 +174,21 @@ def load_dense_point_cloud(ply_file_path: str):
     point_cloud = o3d.io.read_point_cloud(ply_file_path)
     return np.asarray(point_cloud.points), np.asarray(point_cloud.colors)
 
-def depth_to_points_3d(depth_map, K, E):
+def depth_to_points_3d(depth_map, K, E, image=None):
     mask = depth_map > 0.0
     cam_coords = kornia.geometry.depth_to_3d_v2(depth_map, K)#, normalize_points=True)
     cam_coords_flat = rearrange(cam_coords, 'h w xyz -> xyz (h w)')
     ones = torch.ones(1, cam_coords_flat.shape[1], device=cam_coords.device)
     cam_coords_homogeneous = torch.cat([cam_coords_flat, ones], dim=0)
     E_inv = torch.linalg.inv(E)
+    print(E_inv)
+    #breakpoint()
     world_coords_homogeneous = (E_inv @ cam_coords_homogeneous).T
     world_coords = (world_coords_homogeneous[:, :3] / world_coords_homogeneous[:, 3].unsqueeze(1)).view(cam_coords.shape)
-    return world_coords[mask]
+    return world_coords[mask], image[mask]
+
+
+
+if __name__ == "__main__":
+    pass
+

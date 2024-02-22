@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-"""Example of using Rerun to log and visualize the output of COLMAP's sparse reconstruction."""
 from __future__ import annotations
 
 import os
@@ -14,14 +12,12 @@ import numpy.typing as npt
 import rerun as rr  # pip install rerun-sdk
 import torch
 import torch.nn.functional as F
+from ek_fields_utils.colmap_rw_utils import Camera, read_model
 from PIL import Image
 from transformers import pipeline
 
-from ek_fields_utils.colmap_rw_utils import Camera, read_model
 from utils import *
 
-# When dataset filtering is turned on, drop views with less than this many valid points.
-FILTER_MIN_VISIBLE: Final = 10
 
 def scale_camera(camera: Camera, resize: tuple[int, int]) -> tuple[Camera, npt.NDArray[np.float_]]:
     """Scale the camera intrinsics to match the resized image."""
@@ -56,8 +52,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
     # Iterate through images (video frames) logging data related to each frame.
     num_images = len(images.values())
     for idx, image in enumerate(sorted(images.values(), key=lambda im: im.name)):  # type: ignore[no-any-return]
-        if idx % 10 == 0:
-            print(f'{idx} / {num_images}')
+        print(f'{idx} / {num_images}')
         image_file = dataset_path / "images" / image.name
 
         if not os.path.exists(image_file):
@@ -73,10 +68,9 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         quat_xyzw = image.qvec[[1, 2, 3, 0]]  # COLMAP uses wxyz quaternions
         camera = cameras[image.camera_id]
+        scale_factor = np.array([1.0, 1.0])
         if resize:
             camera, scale_factor = scale_camera(camera, resize)
-        else:
-            scale_factor = np.array([1.0, 1.0])
 
         fx, fy, cx, cy, k1, k2, p1, p2 = camera.params
         intrinsics = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]).float()
@@ -96,26 +90,23 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         aligned_depth, _ = ransac_alignment(est_depth.unsqueeze(0), sparse_depth.unsqueeze(0))
         #aligned_depth = adjust_disparity(est_depth.squeeze(), sparse_depth.squeeze())
 
-        point_cloud = depth_to_points_3d(aligned_depth.squeeze(), intrinsics, extrinsics)
+        point_cloud, pc_colors = depth_to_points_3d(aligned_depth.squeeze(), intrinsics, extrinsics, torch.tensor(np.array(img)))
 
         visible = [id != -1 and sparse_points3D.get(id) is not None for id in image.point3D_ids]
         visible_ids = image.point3D_ids[visible]
-
-        if filter_output and len(visible_ids) < FILTER_MIN_VISIBLE:
-            breakpoint()
-            continue
 
         visible_xyzs = [sparse_points3D[id] for id in visible_ids]
         visible_xys = image.xys[visible]
         if resize:
             visible_xys *= scale_factor
 
-        rr.set_time_sequence("frame", frame_idx)
-        rr.log("dense_points", rr.Points3D(points3D, colors=colors))
-
         points = [point.xyz for point in visible_xyzs]
         point_colors = [point.rgb for point in visible_xyzs]
         point_errors = [point.error for point in visible_xyzs]
+
+        # --- rerun logging --- 
+        rr.set_time_sequence("frame", frame_idx)
+        rr.log("dense_points", rr.Points3D(points3D, colors=colors))
 
         rr.log("plot/avg_reproj_err", rr.Scalar(np.mean(point_errors)))
 
