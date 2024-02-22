@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+from matplotlib import pyplot as plt
 import json
 from pathlib import Path
 from typing import Optional
 
+import cv2
 import hydra
 import kornia
 import numpy as np
@@ -21,6 +22,7 @@ from pytorch3d.structures import Pointclouds
 from pytorch3d.transforms import (Rotate, Transform3d, Translate,
                                   quaternion_to_matrix)
 from scipy.spatial.transform import Rotation as R
+from stitching import Stitcher
 from torch import Tensor
 from torch.utils.data import Dataset, default_collate
 from torchvision import transforms
@@ -134,8 +136,86 @@ def align_point_clouds(source_xyz, target_xyz, source_rgb):
         return torch.cat([source_xyz, source_rgb], dim=1)
 
 
+def compute_relative_pose(extrinsics1, extrinsics2):
+    # Assuming extrinsics are 4x4 matrices with rotation and translation
+    R1, t1 = extrinsics1[:3, :3], extrinsics1[:3, 3]
+    R2, t2 = extrinsics2[:3, :3], extrinsics2[:3, 3]
+
+    # Compute relative rotation and translation (from frame 1 to frame 2)
+    relative_rotation = R2 @ R1.T
+    relative_translation = t2 - (relative_rotation @ t1)
+
+    return relative_rotation, relative_translation
+
+def warp_image(image, intrinsics, relative_rotation, relative_translation):
+    # Warps image from the perspective of the first camera to that of the second
+    image = image.permute(2,0,1)
+    height, width = image.shape[1:]
+    image = image.unsqueeze(0)
+    transform_matrix = torch.cat([relative_rotation, relative_translation.unsqueeze(1)], dim=1)
+    warping_matrix = intrinsics @ transform_matrix
+    warping_matrix = warping_matrix[:, :3]
+    warping_matrix = warping_matrix.unsqueeze(0)
+    image = image.float()
+    warped_image = kornia.geometry.transform.warp_perspective(image, warping_matrix, dsize=(height, width))
+    return warped_image.squeeze()
+
+
+def calculate_offset(extrinsics1, extrinsics2, intrinsics):
+    # Calculate the relative transformation from camera 1 to camera 2
+    relative_transform = torch.linalg.inv(extrinsics2) @ extrinsics1
+    relative_transform = relative_transform.to(intrinsics.device)
+
+    # Project the center of the first image to the second image's frame
+    # Assuming the first image's center is (0, 0, 0) in its own frame
+    center_image1 = torch.tensor([0., 0., 0., 1.]).to(intrinsics.device)
+    center_image1_in_image2 = relative_transform @ center_image1
+    breakpoint()
+
+    # Convert this point to pixel coordinates using the intrinsics
+    center_image1_in_image2_pixel = intrinsics @ center_image1_in_image2[:3]
+    center_image1_in_image2_pixel = center_image1_in_image2_pixel.clone()
+    breakpoint()
+    center_image1_in_image2_pixel = center_image1_in_image2_pixel / center_image1_in_image2_pixel[2]  # Normalize
+
+    # Calculate the offset in pixels (rounding to the nearest pixel)
+    offset_x = round(center_image1_in_image2_pixel[0].item())
+    offset_y = round(center_image1_in_image2_pixel[1].item())
+
+    return (offset_x, offset_y)
+
+
+def stitch_images(image1, image2, offset2):
+    # Calculate the dimensions of the canvas
+    canvas_height = max(image1.shape[1], image2.shape[1] + abs(offset2[1]))
+    canvas_width = max(image1.shape[2], image2.shape[2] + abs(offset2[0]))
+
+    # Create the canvas
+    canvas = torch.zeros(3, canvas_height, canvas_width)
+
+    # Calculate where to place image1 on the canvas
+    y_start1 = max(0, -offset2[1])
+    y_end1 = y_start1 + image1.shape[1]
+    x_start1 = max(0, -offset2[0])
+    x_end1 = x_start1 + image1.shape[2]
+
+    # Place image1 on the canvas
+    canvas[:, y_start1:y_end1, x_start1:x_end1] = image1
+
+    # Calculate where to place image2 on the canvas
+    y_start2 = max(0, offset2[1])
+    y_end2 = y_start2 + image2.shape[1]
+    x_start2 = max(0, offset2[0])
+    x_end2 = x_start2 + image2.shape[2]
+
+    # Place image2 on the canvas
+    canvas[:, y_start2:y_end2, x_start2:x_end2] = image2
+
+    return canvas
+
+
 if __name__ == "__main__":
-    json_file_path = '/mnt/sda/epic-fields/P01_04.json'
+    json_file_path = '/mnt/sda/epic-fields/json/P01_04.json'
     image_dir = "/mnt/sda/epic-kitchens/og/frames_rgb_flow/rgb/train/P01/P01_04"
 
     with open(json_file_path) as f:
@@ -172,7 +252,7 @@ if __name__ == "__main__":
     # Stack images along view dimension
     #padding = int((width - height) / 2)
     #image_tensor = torch.cat(images, dim=1)#[..., padding:-padding] # TODO check if need modify intrinsics
-    intrinsics_matrix = intrinsics_matrix.cuda()
+    intrinsics = intrinsics_matrix.cuda()
     extrinsics_tensor = torch.stack(extrinsics).cuda()
 
     image1 = torch.tensor(np.asarray(Image.open('/home/relh/Downloads/marigold example/frame_0000000005.jpg'))).cuda()
@@ -180,15 +260,51 @@ if __name__ == "__main__":
     depth1 = torch.tensor(np.asarray(Image.open('/home/relh/Downloads/marigold example/frame_0000000005_depth_16bit.png'))).cuda()
     depth2 = torch.tensor(np.asarray(Image.open('/home/relh/Downloads/marigold example/frame_0000000010_depth_16bit.png'))).cuda()
 
+    image1 = image1.permute(2, 0, 1)
+    image2 = image2.permute(2, 0, 1)
+
     extrinsics1 = extrinsics_tensor[0]
     extrinsics2 = extrinsics_tensor[1]
+
+    #stitcher = Stitcher(try_use_gpu=True)
+    #image1 = '/home/relh/Downloads/marigold example/frame_0000000005.jpg'
+    #image2 = '/home/relh/Downloads/marigold example/frame_0000000010.jpg'
+    #panorama = stitcher.stitch([cv2.imread(image1), cv2.imread(image2)])
+    #panorama = stitcher.stitch([cv2.imread("img1.jpg"), cv.imread("img2.jpg")])
+    #breakpoint()
+
+    # Load images
+    #image1 = load_image('path_to_your_first_image.jpg')
+    #image2 = load_image('path_to_your_second_image.jpg')
+
+    # Compute the relative pose
+    relative_rotation, relative_translation = compute_relative_pose(extrinsics1, extrinsics2)
+
+    # Warp the second image to the perspective of the first
+    warped_image2 = warp_image(image2, intrinsics, relative_rotation, relative_translation)
+
+    # Stitch the images together
+    # Assuming intrinsics, extrinsics1, and extrinsics2 are your camera parameters
+    offset2 = calculate_offset(extrinsics1, extrinsics2, intrinsics)
+
+    # Assuming image1 and image2 are your loaded images, in (C, H, W) format
+    stitched_image = stitch_images(image1, image2, offset2)
+
+    # Convert back to numpy array and display/save
+    stitched_image = stitched_image.permute(1, 2, 0).numpy()
+    stitched_image = (stitched_image * 1.0).astype(np.uint8)
+    stitched_image = cv2.cvtColor(stitched_image, cv2.COLOR_RGB2BGR)
+    plt.imshow(stitched_image)
+    plt.show()
+    #cv2.waitKey(0)
+    #cv2.destroyAllWindows()
 
     #depth1 = process_depth(depth1)
     #depth2 = process_depth(depth2)
 
     # Convert images and depth maps to point clouds
-    point_cloud1 = create_point_cloud(image1, depth1, intrinsics_matrix)
-    point_cloud2 = create_point_cloud(image2, depth2, intrinsics_matrix)
+    point_cloud1 = create_point_cloud(image1, depth1, intrinsics)
+    point_cloud2 = create_point_cloud(image2, depth2, intrinsics)
 
     '''
     # Apply extrinsic transformations to one of the point clouds
@@ -216,6 +332,3 @@ if __name__ == "__main__":
     rr.init("rerun_lala", spawn=True)
     rr.log("1", rr.Points3D(point_cloud1[:, :3], colors=point_cloud1[:, 3:], radii=1.0))
     rr.log("2", rr.Points3D(aligned_point_cloud2[:, :3], colors=aligned_point_cloud2[:, 3:], radii=1.0))
-
-
-
