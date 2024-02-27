@@ -30,6 +30,24 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 torch.set_default_dtype(torch.float32)
 torch.set_default_device('cuda')
 
+def save_rgba_image(rgb_image, mask, file_path):
+    # Convert the PyTorch tensor to a numpy array and adjust dimensions
+    rgb_array = rgb_image.numpy().astype(np.uint8)
+
+    # Create a PIL image from the numpy array
+    rgb_pil = Image.fromarray(rgb_array)
+
+    # Invert the mask: 0 for transparent (mask=1) and 255 for opaque (mask=0)
+    alpha = np.where(mask.numpy() == 1, 0, 255).astype(np.uint8)
+
+    # Create an alpha channel image from the mask
+    alpha_pil = Image.fromarray(alpha)
+
+    # Combine the RGB image with the alpha channel to get an RGBA image
+    rgba_pil = Image.merge("RGBA", [rgb_pil.split()[0], rgb_pil.split()[1], rgb_pil.split()[2], alpha_pil])
+
+    # Save the image
+    rgba_pil.save(file_path, 'PNG')
 
 def fill_missing_values_batched(image, mask):
     # Ensure image is in float and mask is repeated for each channel

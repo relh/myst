@@ -86,7 +86,14 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         #image.save('./image.png', format='PNG')
 
         mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
-        new_image = fill_missing_values_batched(image, mask_image)
+
+        #new_image = fill_missing_values_batched(image, mask_image)
+        save_rgba_image(image.cpu(), mask_image.cpu(), './new_image.png')
+        breakpoint()
+
+        # TODO 
+        # split up image into two halves and in-paint
+        # apply slight delta extrinsics 
 
         #image = inpaint_pipe(prompt='a scene from epic kitchens', image=image, mask_image=mask_image).images[0]
         #del inpaint_pipe
@@ -94,9 +101,9 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         # Visualizing the optimized generated image
         #new_image = new_image / 255.0
-        #plt.imshow(new_image.cpu().numpy())
-        #plt.axis('off')
-        #plt.show()
+        plt.imshow(new_image.cpu().numpy())
+        plt.axis('off')
+        plt.show()
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
