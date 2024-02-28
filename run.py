@@ -97,48 +97,52 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         #mask_image.save('./mask_image.png', format='PNG')
         #image.save('./image.png', format='PNG')
 
-        mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
-        mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
-
         #new_image = fill_missing_values_batched(image, mask_image)
         # TODO fill_missing with stable_diffusion OUTpainting
 
         #save_rgba_image(image.cpu(), mask_image.cpu(), './new_image.png')
         #breakpoint()
 
-        # TODO 
-        # split up image into two halves and in-paint
         # apply slight delta extrinsics 
 
-        #image = image.permute(2,0,1)
+        # --- speckle pipeline ---
+        mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
+        mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
+
         left_img, right_img = prep_pil(pil_img)
         left_mask, right_mask = prep_pil(mask_image)
 
         left_img = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
         right_img = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
 
+        # --- sideways pipeline ---
+        # split up image into two halves and in-paint
         new_left_mask = torch.zeros(512, 512)
         new_right_mask = torch.zeros(512, 512)
 
-        new_left_mask[:, :56*2] = 255.0
-        new_right_mask[:, -56*2:] = 255.0
+        new_left_mask[:, :56] = 255.0
+        new_right_mask[:, -56:] = 255.0
 
         new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
         new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
 
-        left_img = inpaint_pipe(prompt='', image=left_img, mask_image=new_left_mask, strength=0.5).images[0]
-        right_img = inpaint_pipe(prompt='', image=right_img, mask_image=new_right_mask, strength=0.5).images[0]
+        new_left_img = inpaint_pipe(prompt='kitchen', image=left_img, mask_image=new_left_mask, strength=0.75).images[0]
+        new_right_img = inpaint_pipe(prompt='kitchen', image=right_img, mask_image=new_right_mask, strength=0.75).images[0]
         #left_img = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
         #right_img = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
         #del inpaint_pipe
 
         # Visualizing the optimized generated image
         #new_image = new_image / 255.0
-        fig, ax = plt.subplots(2, 2)
+        fig, ax = plt.subplots(4, 2)
         ax[0, 0].imshow(left_img)
         ax[0, 1].imshow(right_img)
-        ax[1, 0].imshow(new_left_mask)
-        ax[1, 1].imshow(new_right_mask)
+        ax[1, 0].imshow(left_mask)
+        ax[1, 1].imshow(right_mask)
+        ax[2, 0].imshow(new_left_img)
+        ax[2, 1].imshow(new_right_img)
+        ax[3, 0].imshow(new_left_mask)
+        ax[3, 1].imshow(new_right_mask)
         plt.show()
         breakpoint()
 
