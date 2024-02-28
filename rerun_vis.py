@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import torch
@@ -83,7 +85,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         if len(this_mask_files) > 0:
             this_mask = torch.stack([torch.tensor(np.asarray(Image.open(x).convert('1'))) for x in this_mask_files]).sum(dim=0).cuda()
         else:
-            this_mask = torch.zeros((256, 456)).cuda()
+            this_mask = torch.zeros((256, 456)).int().cuda()
 
         proj_colmap, proj_dyn, colmap_depth, vis_colmap_3d, vis_dyn_3d, vis_colmap_colors, vis_dyn_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask)
         

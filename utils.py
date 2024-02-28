@@ -20,16 +20,31 @@ from decord import VideoReader
 from einops import rearrange, repeat
 from imageio import get_writer
 from matplotlib import pyplot as plt
-from PIL import Image
+from PIL import Image, ImageOps
 from scipy.spatial.transform import Rotation as R
 from torchvision.transforms import ToTensor
 from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 
-torch.set_default_dtype(torch.float32)
-torch.set_default_device('cuda')
+#torch.set_default_dtype(torch.float32)
+#torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
+
+def prep_pil(pil_img):
+    # turns ek 456x256 img into two square 256ers 
+    image = pil_img
+    width, height = image.size
+    split_point = width // 2
+    left_image = image.crop((0, 0, split_point, height))
+    right_image = image.crop((split_point, 0, width, height))
+
+    # Pad the images
+    left_padded = ImageOps.expand(left_image, (256-split_point, 0, 0, 0), fill='white')
+    right_padded = ImageOps.expand(right_image, (0, 0, 256-split_point, 0), fill='white')
+
+    # Save or display the images
+    return left_padded, right_padded
 
 def save_rgba_image(rgb_image, mask, file_path):
     # Convert the PyTorch tensor to a numpy array and adjust dimensions
@@ -196,8 +211,7 @@ def get_camera_extrinsic_matrix(image):
     return T
 
 def points_3d_to_image(points_3d, colors, intrinsics, extrinsics, image_shape, this_mask=None):
-    points_3d = torch.tensor(points_3d).float()
-    points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1)), dim=1).T
+    points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
     camera_coords = extrinsics @ points_homogeneous
     proj_pts = intrinsics @ camera_coords[:3, :]
     im_proj_pts = proj_pts[:2] / proj_pts[2]
@@ -214,11 +228,11 @@ def points_3d_to_image(points_3d, colors, intrinsics, extrinsics, image_shape, t
     proj_pts = proj_pts[:, visible]
     im_proj_pts = im_proj_pts[:, visible]
 
-    if this_mask == None: this_mask = torch.zeros((256, 456))
+    if this_mask == None: this_mask = torch.zeros((256, 456), device=points_3d.device)
     unocc = this_mask[y_pixels, x_pixels] == 0
     occ = this_mask[y_pixels, x_pixels] == 1
 
-    depth_map = torch.full(image_shape, float('inf'))
+    depth_map = torch.full(image_shape, float('inf'), device=points_3d.device)
     depth_map[y_pixels[unocc], x_pixels[unocc]] = torch.min(depth_map[y_pixels[unocc], x_pixels[unocc]], proj_pts[2][unocc])
     depth_map[depth_map == float('inf')] = 0
 

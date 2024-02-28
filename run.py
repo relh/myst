@@ -3,6 +3,10 @@
 
 from __future__ import annotations
 
+import torch
+
+torch.backends.cuda.preferred_linalg_library()
+
 import os
 import re
 from argparse import ArgumentParser
@@ -32,11 +36,16 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
     rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
-    pipe = pipeline(task="depth-estimation", model="LiheYoung/depth-anything-large-hf", device="cuda:0")
+    pipe = pipeline(task="depth-estimation", \
+                    torch_dtype=torch.float16, \
+                    model="LiheYoung/depth-anything-large-hf", 
+                    device="cuda:0")
     image_file = None
 
-    #inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained("runwayml/stable-diffusion-inpainting")
-    #inpaint_pipe = inpaint_pipe.to("cpu")
+    inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
+        "runwayml/stable-diffusion-inpainting")#, \
+    #torch_dtype=torch.float16)
+    inpaint_pipe = inpaint_pipe.to("cpu")
     #prompt = "Face of a yellow cat, high resolution, sitting on a park bench"
     #image and mask_image should be PIL images.
     #The mask structure is white for inpainting and black for keeping as is
@@ -52,21 +61,25 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # only get one image, so only do one COLMAP calibration
         if image_file is None: 
             image_file = dataset_path / "images" / image.name
-            img = Image.open(str(image_file))
+            pil_img = Image.open(str(image_file))
 
+        # setup camera
         quat_xyzw = image.qvec[[1, 2, 3, 0]]  # COLMAP uses wxyz quaternions
         camera = cameras[image.camera_id]
         fx, fy, cx, cy, k1, k2, p1, p2 = camera.params
-        intrinsics = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]).float()
-        extrinsics = get_camera_extrinsic_matrix(image)
-        proj_colmap, colmap_depth, vis_colmap_3d, vis_colmap_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask=None)
-        da_depth = F.interpolate(pipe(img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
+
+        # put things on cuda
+        intrinsics = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]).float().cuda()
+        extrinsics = get_camera_extrinsic_matrix(image).cuda()
+        dense_points3d = torch.tensor(dense_points3d).float().cuda()
+
+        proj_colmap, proj_dyn, colmap_depth, vis_colmap_3d, vis_dyn_3d, vis_colmap_colors, vis_dyn_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask=None)
+        da_depth = F.interpolate(pipe(pil_img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
         aligned_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
 
-        da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, torch.tensor(np.array(img)))
-        proj_da, _, vis_da_3d, vis_da_colors = points_3d_to_image(da_3d, da_colors, intrinsics, extrinsics, (camera.height, camera.width))
-
-        # Optimizing the image creation process using smart indexing in PyTorch
+        img_tensor = torch.tensor(np.array(pil_img), device=aligned_da_depth.device)
+        da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, img_tensor)
+        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = points_3d_to_image(da_3d, da_colors, intrinsics, extrinsics, (camera.height, camera.width))
 
         # Initialize a black image of size (256, 456, 3)
         image_size = (256, 456, 3)
@@ -80,30 +93,54 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # Using advanced indexing to directly place colors at the projected points
         image[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
-        #mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
         #image = Image.fromarray(image.cpu().numpy())
         #mask_image.save('./mask_image.png', format='PNG')
         #image.save('./image.png', format='PNG')
 
         mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
+        mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
 
         #new_image = fill_missing_values_batched(image, mask_image)
-        save_rgba_image(image.cpu(), mask_image.cpu(), './new_image.png')
-        breakpoint()
+        # TODO fill_missing with stable_diffusion OUTpainting
+
+        #save_rgba_image(image.cpu(), mask_image.cpu(), './new_image.png')
+        #breakpoint()
 
         # TODO 
         # split up image into two halves and in-paint
         # apply slight delta extrinsics 
 
-        #image = inpaint_pipe(prompt='a scene from epic kitchens', image=image, mask_image=mask_image).images[0]
+        #image = image.permute(2,0,1)
+        left_img, right_img = prep_pil(pil_img)
+        left_mask, right_mask = prep_pil(mask_image)
+
+        left_img = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
+        right_img = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
+
+        new_left_mask = torch.zeros(512, 512)
+        new_right_mask = torch.zeros(512, 512)
+
+        new_left_mask[:, :56*2] = 255.0
+        new_right_mask[:, -56*2:] = 255.0
+
+        new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
+        new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
+
+        left_img = inpaint_pipe(prompt='', image=left_img, mask_image=new_left_mask, strength=0.5).images[0]
+        right_img = inpaint_pipe(prompt='', image=right_img, mask_image=new_right_mask, strength=0.5).images[0]
+        #left_img = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
+        #right_img = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
         #del inpaint_pipe
-        #breakpoint()
 
         # Visualizing the optimized generated image
         #new_image = new_image / 255.0
-        plt.imshow(new_image.cpu().numpy())
-        plt.axis('off')
+        fig, ax = plt.subplots(2, 2)
+        ax[0, 0].imshow(left_img)
+        ax[0, 1].imshow(right_img)
+        ax[1, 0].imshow(new_left_mask)
+        ax[1, 1].imshow(new_right_mask)
         plt.show()
+        breakpoint()
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -161,4 +198,6 @@ if __name__ == "__main__":
     # apply delta extrinsics from EF using nearest neighbors
     # re-render new image with mask
     # in paint black with diffusion
-    main()
+    with torch.no_grad():
+        with torch.autocast(device_type="cuda"):
+            main()
