@@ -29,6 +29,7 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 
 torch.set_default_dtype(torch.float32)
 torch.set_default_device('cuda')
+torch.backends.cuda.preferred_linalg_library()
 
 def save_rgba_image(rgb_image, mask, file_path):
     # Convert the PyTorch tensor to a numpy array and adjust dimensions
@@ -215,31 +216,37 @@ def points_3d_to_image(points_3d, colors, intrinsics, extrinsics, image_shape, t
 
     if this_mask == None: this_mask = torch.zeros((256, 456))
     unocc = this_mask[y_pixels, x_pixels] == 0
+    occ = this_mask[y_pixels, x_pixels] == 1
 
     depth_map = torch.full(image_shape, float('inf'))
     depth_map[y_pixels[unocc], x_pixels[unocc]] = torch.min(depth_map[y_pixels[unocc], x_pixels[unocc]], proj_pts[2][unocc])
     depth_map[depth_map == float('inf')] = 0
 
-    return im_proj_pts.T[unocc][:, :2], depth_map, points_3d[visible][unocc], (None if colors is None else colors[visible][unocc])
+    return im_proj_pts.T[unocc][:, :2], \
+           im_proj_pts.T[occ][:, :2], \
+           depth_map, \
+           points_3d[visible][unocc], \
+           points_3d[visible][occ], \
+           (None if colors is None else colors[visible][unocc]), \
+           (None if colors is None else colors[visible][occ])
 
 def load_dense_point_cloud(ply_file_path: str):
     point_cloud = o3d.io.read_point_cloud(ply_file_path)
     return np.asarray(point_cloud.points), np.asarray(point_cloud.colors)
 
-def depth_to_points_3d(depth_map, K, E, image=None):
-    mask = depth_map > 0.0
+def depth_to_points_3d(depth_map, K, E, image=None, mask=None):
+    if mask is None:
+        mask = depth_map > 0.0
+    mask = mask.bool()
     cam_coords = kornia.geometry.depth_to_3d_v2(depth_map, K)#, normalize_points=True)
     cam_coords_flat = rearrange(cam_coords, 'h w xyz -> xyz (h w)')
     ones = torch.ones(1, cam_coords_flat.shape[1], device=cam_coords.device)
     cam_coords_homogeneous = torch.cat([cam_coords_flat, ones], dim=0)
     E_inv = torch.linalg.inv(E)
     print(E_inv)
-    #breakpoint()
     world_coords_homogeneous = (E_inv @ cam_coords_homogeneous).T
     world_coords = (world_coords_homogeneous[:, :3] / world_coords_homogeneous[:, 3].unsqueeze(1)).view(cam_coords.shape)
     return world_coords[mask], image[mask]
-
-
 
 if __name__ == "__main__":
     pass

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import torch
+
+torch.backends.cuda.preferred_linalg_library()
+
 import os
 import re
 from argparse import ArgumentParser
@@ -10,12 +14,11 @@ import cv2
 import numpy as np
 import numpy.typing as npt
 import rerun as rr  # pip install rerun-sdk
-import torch
 import torch.nn.functional as F
-from ek_fields_utils.colmap_rw_utils import Camera, read_model
 from PIL import Image
 from transformers import pipeline
 
+from ek_fields_utils.colmap_rw_utils import Camera, read_model
 from utils import *
 
 
@@ -82,7 +85,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         else:
             this_mask = torch.zeros((256, 456)).cuda()
 
-        proj_colmap, colmap_depth, vis_colmap_3d, vis_colmap_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask)
+        proj_colmap, proj_dyn, colmap_depth, vis_colmap_3d, vis_dyn_3d, vis_colmap_colors, vis_dyn_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask)
         
         img = Image.open(str(image_file))
         da_depth = F.interpolate(pipe(img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
@@ -90,10 +93,12 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         aligned_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
         #aligned_da_depth = adjust_disparity(da_depth.squeeze(), colmap_depth.squeeze())
 
-        da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, torch.tensor(np.array(img)))
+        img = torch.tensor(np.array(img))
+        img[this_mask, :] = 255
+        da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, img, mask=this_mask)
 
         visible = [id != -1 and sparse_points3d.get(id) is not None for id in image.point3D_ids]
-        visible_ids = image.point3d_ids[visible]
+        visible_ids = image.point3D_ids[visible]
 
         visible_xyzs = [sparse_points3d[id] for id in visible_ids]
         visible_xys = image.xys[visible]
@@ -107,11 +112,12 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", frame_idx)
         rr.log("dense_points", rr.Points3D(dense_points3d, colors=colors))
+        rr.log("dynamic_points", rr.Points3D(dense_points3d, colors=colors))
 
         rr.log("plot/avg_reproj_err", rr.Scalar(np.mean(point_errors)))
 
         rr.log("points", rr.Points3D(points, colors=point_colors), rr.AnyValues(error=point_errors))
-        rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=[99, 99, 99]))
+        rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy())) #[99, 99, 99]))
 
         # COLMAP's camera transform is "camera from world"
         rr.log("camera", rr.Transform3D(translation=image.tvec, rotation=rr.Quaternion(xyzw=quat_xyzw), from_parent=True))
@@ -137,6 +143,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         rr.log("camera/image/keypoints", rr.Points2D(visible_xys, colors=[34, 138, 167]))
         rr.log("camera/image/dense_keypoints", rr.Points2D(proj_colmap.cpu().numpy(), colors=[167, 138, 34]))
+        rr.log("camera/image/dynamic_keypoints", rr.Points2D(proj_dyn.cpu().numpy(), colors=[34, 138, 167]))
 
 
 def main() -> None:
