@@ -128,12 +128,8 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         new_left_img = inpaint_pipe(prompt='kitchen', image=left_img, mask_image=new_left_mask, strength=0.75).images[0]
         new_right_img = inpaint_pipe(prompt='kitchen', image=right_img, mask_image=new_right_mask, strength=0.75).images[0]
-        #left_img = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
-        #right_img = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
-        #del inpaint_pipe
 
         # Visualizing the optimized generated image
-        #new_image = new_image / 255.0
         fig, ax = plt.subplots(4, 2)
         ax[0, 0].imshow(left_img)
         ax[0, 1].imshow(right_img)
