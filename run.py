@@ -45,7 +45,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
     inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
         "runwayml/stable-diffusion-inpainting")#, \
     #torch_dtype=torch.float16)
-    inpaint_pipe = inpaint_pipe.to("cpu")
+    inpaint_pipe = inpaint_pipe.to("cuda")
     #prompt = "Face of a yellow cat, high resolution, sitting on a park bench"
     #image and mask_image should be PIL images.
     #The mask structure is white for inpainting and black for keeping as is
@@ -118,16 +118,14 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
         new_left_mask = torch.zeros(512, 512)
-        new_right_mask = torch.zeros(512, 512)
-
-        new_left_mask[:, :56] = 255.0
-        new_right_mask[:, -56:] = 255.0
-
+        new_left_mask[:, :int(56*1.5)] = 255.0
         new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
-        new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
+        new_left_img = inpaint_pipe(prompt='kitchen', image=left_img, mask_image=new_left_mask, strength=0.95).images[0]
 
-        new_left_img = inpaint_pipe(prompt='kitchen', image=left_img, mask_image=new_left_mask, strength=0.75).images[0]
-        new_right_img = inpaint_pipe(prompt='kitchen', image=right_img, mask_image=new_right_mask, strength=0.75).images[0]
+        new_right_mask = torch.zeros(512, 512)
+        new_right_mask[:, int(-56*1.5):] = 255.0
+        new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
+        new_right_img = inpaint_pipe(prompt='kitchen', image=right_img, mask_image=new_right_mask, strength=0.95).images[0]
 
         # Visualizing the optimized generated image
         fig, ax = plt.subplots(4, 2)
