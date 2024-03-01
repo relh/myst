@@ -38,18 +38,31 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
     rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     # --- pipeline setup ---
+    '''
+    import replicate
+    output = replicate.run(
+      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
+      input={
+        "prompt": "an armchair in a room full of plants",
+        "image": open("path/to/outpainting-source.jpg", "rb"),
+        "mask": open("path/to/outpainting-mask.jpg", "rb")
+      }
+    )
+    print(output)
+    breakpoint()
+    '''
     pipe = pipeline(task="depth-estimation", \
                     torch_dtype=torch.float16, \
                     model="LiheYoung/depth-anything-large-hf", 
                     device="cuda:0")
 
-    #inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
-    #    "runwayml/stable-diffusion-inpainting", \
-    #    torch_dtype=torch.float16)
-
-    inpaint_pipe = AutoPipelineForInpainting.from_pretrained(
-        "kandinsky-community/kandinsky-2-2-decoder-inpaint", 
+    inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
+        "runwayml/stable-diffusion-inpainting", \
         torch_dtype=torch.float16)
+
+    #inpaint_pipe = AutoPipelineForInpainting.from_pretrained(
+    #    "kandinsky-community/kandinsky-2-2-decoder-inpaint", 
+    #    torch_dtype=torch.float16)
     inpaint_pipe = inpaint_pipe.to("cuda:0")
 
     # Iterate through images (video frames) logging data related to each frame.
