@@ -17,7 +17,7 @@ import numpy as np
 import rerun as rr  # pip install rerun-sdk
 import torch
 import torch.nn.functional as F
-from diffusers import StableDiffusionInpaintPipeline
+from diffusers import StableDiffusionInpaintPipeline, AutoPipelineForInpainting
 from PIL import Image
 from transformers import pipeline
 
@@ -36,23 +36,24 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
     rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
+
+    # --- pipeline setup ---
     pipe = pipeline(task="depth-estimation", \
                     torch_dtype=torch.float16, \
                     model="LiheYoung/depth-anything-large-hf", 
                     device="cuda:0")
-    image_file = None
 
-    inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
-        "runwayml/stable-diffusion-inpainting")#, \
-    #torch_dtype=torch.float16)
-    inpaint_pipe = inpaint_pipe.to("cuda")
-    #prompt = "Face of a yellow cat, high resolution, sitting on a park bench"
-    #image and mask_image should be PIL images.
-    #The mask structure is white for inpainting and black for keeping as is
-    #image = inpaint_pipe(prompt=prompt, image=image, mask_image=mask_image).images[0]
-    #image.save("./yellow_cat_on_park_bench.png")
+    #inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
+    #    "runwayml/stable-diffusion-inpainting", \
+    #    torch_dtype=torch.float16)
+
+    inpaint_pipe = AutoPipelineForInpainting.from_pretrained(
+        "kandinsky-community/kandinsky-2-2-decoder-inpaint", 
+        torch_dtype=torch.float16)
+    inpaint_pipe = inpaint_pipe.to("cuda:0")
 
     # Iterate through images (video frames) logging data related to each frame.
+    image_file = None
     num_images = len(images.values())
     for idx, image in enumerate(sorted(images.values(), key=lambda im: im.name)):  # type: ignore[no-any-return]
         if idx % 10 == 0:
@@ -93,17 +94,6 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # Using advanced indexing to directly place colors at the projected points
         image[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
-        #image = Image.fromarray(image.cpu().numpy())
-        #mask_image.save('./mask_image.png', format='PNG')
-        #image.save('./image.png', format='PNG')
-
-        #new_image = fill_missing_values_batched(image, mask_image)
-        # TODO fill_missing with stable_diffusion OUTpainting
-
-        #save_rgba_image(image.cpu(), mask_image.cpu(), './new_image.png')
-        #breakpoint()
-
-        # apply slight delta extrinsics 
 
         # --- speckle pipeline ---
         mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
@@ -121,11 +111,13 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         new_left_mask[:, :int(56*1.5)] = 255.0
         new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
         new_left_img = inpaint_pipe(prompt='kitchen', image=left_img, mask_image=new_left_mask, strength=0.95).images[0]
+        new_left_img = inpaint_pipe.image_processor.apply_overlay(new_left_mask, left_img, new_left_img)
 
         new_right_mask = torch.zeros(512, 512)
         new_right_mask[:, int(-56*1.5):] = 255.0
         new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
         new_right_img = inpaint_pipe(prompt='kitchen', image=right_img, mask_image=new_right_mask, strength=0.95).images[0]
+        new_right_img = inpaint_pipe.image_processor.apply_overlay(new_right_mask, right_img, new_right_img)
 
         # Visualizing the optimized generated image
         fig, ax = plt.subplots(4, 2)
@@ -139,6 +131,9 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         ax[3, 1].imshow(new_right_mask)
         plt.show()
         breakpoint()
+
+        # --- apply delta extrinsics ---
+        # TODO
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
