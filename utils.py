@@ -31,19 +31,54 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 #torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
-def prep_pil(pil_img):
-    # turns ek 456x256 img into two square 256ers 
+def generate_noise_image(width, height):
+    """
+    Generate a noise image of specified width and height.
+    """
+    noise_array = np.random.rand(height, width, 3) * 255
+    noise_image = Image.fromarray(noise_array.astype('uint8')).convert('RGB')
+    return noise_image
+
+def prep_pil(pil_img, black=False):
+    """
+    Turns a 456x256 image into two square images padded with noise to make them 256x256.
+    """
+    if black:
+        # turns ek 456x256 img into two square 256ers 
+        image = pil_img
+        width, height = image.size
+        split_point = width // 2
+        left_image = image.crop((0, 0, split_point, height))
+        right_image = image.crop((split_point, 0, width, height))
+
+        # Pad the images
+        left_padded = ImageOps.expand(left_image, (256-split_point, 0, 0, 0), fill='white')
+        right_padded = ImageOps.expand(right_image, (0, 0, 256-split_point, 0), fill='white')
+
+        # Save or display the images
+        return left_padded, right_padded
+
     image = pil_img
     width, height = image.size
     split_point = width // 2
+    
     left_image = image.crop((0, 0, split_point, height))
     right_image = image.crop((split_point, 0, width, height))
-
-    # Pad the images
-    left_padded = ImageOps.expand(left_image, (256-split_point, 0, 0, 0), fill='black')
-    right_padded = ImageOps.expand(right_image, (0, 0, 256-split_point, 0), fill='black')
-
-    # Save or display the images
+    
+    # Generate noise images for padding
+    left_noise = generate_noise_image(256 - split_point, height)
+    right_noise = generate_noise_image(256 - split_point, height)
+    
+    # Create new images with noise padding
+    left_padded = Image.new('RGB', (256, height))
+    right_padded = Image.new('RGB', (256, height))
+    
+    left_padded.paste(left_noise, (0, 0))
+    left_padded.paste(left_image, (256 - split_point, 0))
+    
+    right_padded.paste(right_image, (0, 0))
+    right_padded.paste(right_noise, (split_point, 0))
+    
     return left_padded, right_padded
 
 def save_rgba_image(rgb_image, mask, file_path):

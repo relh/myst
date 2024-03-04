@@ -34,8 +34,8 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # Filter out noisy points
         sparse_points3d = {id: point for id, point in sparse_points3d.items() if point.rgb.any() and len(point.image_ids) > 4}
 
-    rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
-    rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
+    #rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
+    #rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     # --- pipeline setup ---
     '''
@@ -82,11 +82,12 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         camera = cameras[image.camera_id]
         fx, fy, cx, cy, k1, k2, p1, p2 = camera.params
 
-        # put things on cuda
+        # --- move camera details to cuda ---
         intrinsics = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]).float().cuda()
         extrinsics = get_camera_extrinsic_matrix(image).cuda()
         dense_points3d = torch.tensor(dense_points3d).float().cuda()
 
+        # --- project 3D points ---
         proj_colmap, proj_dyn, colmap_depth, vis_colmap_3d, vis_dyn_3d, vis_colmap_colors, vis_dyn_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask=None)
         da_depth = F.interpolate(pipe(pil_img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
         aligned_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
@@ -107,48 +108,55 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # Using advanced indexing to directly place colors at the projected points
         image[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
-
         # --- speckle pipeline ---
         mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
         mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
 
-        left_img, right_img = prep_pil(pil_img)
-        left_mask, right_mask = prep_pil(mask_image)
+        left_img, right_img = prep_pil(pil_img, black=True)
+        left_mask, right_mask = prep_pil(mask_image, black=True)
 
-        left_img = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
-        right_img = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
+        left_img_v2 = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
+        right_img_v2 = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
 
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
         new_left_mask = torch.zeros(512, 512)
         new_left_mask[:, :int(56*1.5)] = 255.0
         new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
-        new_left_img = inpaint_pipe(prompt='kitchen', image=left_img, mask_image=new_left_mask, strength=0.95).images[0]
-        new_left_img = inpaint_pipe.image_processor.apply_overlay(new_left_mask, left_img, new_left_img)
+        left_img_v3 = inpaint_pipe(prompt='kitchen', image=left_img_v2, mask_image=new_left_mask, strength=1.00).images[0]
+        left_img_v4 = inpaint_pipe.image_processor.apply_overlay(new_left_mask, left_img_v2, left_img_v3)
 
         new_right_mask = torch.zeros(512, 512)
         new_right_mask[:, int(-56*1.5):] = 255.0
         new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
-        new_right_img = inpaint_pipe(prompt='kitchen', image=right_img, mask_image=new_right_mask, strength=0.95).images[0]
-        new_right_img = inpaint_pipe.image_processor.apply_overlay(new_right_mask, right_img, new_right_img)
+        right_img_v3 = inpaint_pipe(prompt='kitchen', image=right_img_v2, mask_image=new_right_mask, strength=1.00).images[0]
+        right_img_v4 = inpaint_pipe.image_processor.apply_overlay(new_right_mask, right_img_v2, right_img_v3)
 
         # Visualizing the optimized generated image
-        fig, ax = plt.subplots(4, 2)
+        fig, ax = plt.subplots(2, 6, figsize=(10,15))
         ax[0, 0].imshow(left_img)
-        ax[0, 1].imshow(right_img)
-        ax[1, 0].imshow(left_mask)
+        ax[1, 0].imshow(right_img)
+        ax[0, 1].imshow(left_mask)
         ax[1, 1].imshow(right_mask)
-        ax[2, 0].imshow(new_left_img)
-        ax[2, 1].imshow(new_right_img)
-        ax[3, 0].imshow(new_left_mask)
-        ax[3, 1].imshow(new_right_mask)
+        ax[0, 2].imshow(left_img_v2)
+        ax[1, 2].imshow(right_img_v2)
+        ax[0, 3].imshow(new_left_mask)
+        ax[1, 3].imshow(new_right_mask)
+        ax[0, 4].imshow(left_img_v3)
+        ax[1, 4].imshow(right_img_v3)
+        ax[0, 5].imshow(left_img_v4)
+        ax[1, 5].imshow(right_img_v4)
+        plt.tight_layout()
         plt.show()
+        import sys
+        sys.exit()
         breakpoint()
 
         # --- apply delta extrinsics ---
         # TODO
 
         # --- rerun logging --- 
+        '''
         rr.set_time_sequence("frame", idx+1)
         #rr.log("dense_points", rr.Points3D(dense_points3d, colors=colors))
 
@@ -181,19 +189,20 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
             rr.log("camera/image", rr.Image(rgb).compress(jpeg_quality=75))
         else:
             rr.log("camera/image", rr.ImageEncoded(path=dataset_path / "images" / image.name))
+        '''
 
         if idx > 30: breakpoint()
 
 
 def main() -> None:
     parser = ArgumentParser(description="Visualize the output of COLMAP's sparse reconstruction on a video.")
-    rr.script_add_args(parser)
+    #rr.script_add_args(parser)
     args = parser.parse_args()
 
-    rr.script_setup(args, "2myst")
+    #rr.script_setup(args, "2myst")
     dataset_path = Path('/mnt/sda/epic-fields/p01_04/')
     read_and_log_sparse_reconstruction(dataset_path, filter_output=True, resize=False)
-    rr.script_teardown(args)
+    #rr.script_teardown(args)
 
 
 if __name__ == "__main__":
