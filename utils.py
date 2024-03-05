@@ -31,6 +31,44 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 #torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
+
+from PIL import Image
+
+def expand_image_and_create_mask(image, expand_width, side='right', fill=(0, 0, 0)):
+    """
+    Expand an image on the specified side and create a corresponding mask.
+    
+    Args:
+        image (PIL.Image): Original image.
+        expand_width (int): Number of pixels to expand the image by.
+        side (str): Side to expand the image on ('left' or 'right').
+        fill (tuple): Fill color for the expanded area (used for the mask).
+    
+    Returns:
+        PIL.Image: Expanded image.
+        PIL.Image: Mask image indicating new (to be inpainted) areas.
+    """
+    # Create new image with expanded width
+    new_width = image.width + expand_width
+    expanded_image = Image.new("RGB", (new_width, image.height), fill)
+
+    # Paste the original image onto the expanded canvas based on the specified side
+    if side == 'left':
+        expanded_image.paste(image, (expand_width, 0))
+    elif side == 'right':
+        expanded_image.paste(image, (0, 0))
+    else:
+        raise ValueError("Unsupported side. Use 'left' or 'right'.")
+
+    # Create a mask for the expanded area
+    mask = Image.new("L", (new_width, image.height), 0)  # Fill with 0 (unchanged)
+    if side == 'left':
+        mask.paste(255, (0, 0, expand_width, image.height))  # New area set to 255 (to be inpainted)
+    elif side == 'right':
+        mask.paste(255, (image.width, 0, new_width, image.height))  # New area set to 255 (to be inpainted)
+
+    return expanded_image, mask
+
 def generate_noise_image(width, height):
     """
     Generate a noise image of specified width and height.

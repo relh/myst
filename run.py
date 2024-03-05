@@ -14,6 +14,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import replicate
 import rerun as rr  # pip install rerun-sdk
 import torch
 import torch.nn.functional as F
@@ -22,8 +23,10 @@ from PIL import Image
 from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model
-from misc.outpainting import run
 from misc.control import generate_outpainted_image
+from misc.outpainting import run
+from misc.replicate_me import run_replicate_with_pil
+from misc.colab import run_inpainting_pipeline
 from utils import *
 
 
@@ -40,19 +43,6 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
     #rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     # --- pipeline setup ---
-    '''
-    import replicate
-    output = replicate.run(
-      "stability-ai/sdxl:39ed52f2a78e934b3ba6e2a89f5b1c712de7dfea535525255b1aa35c5565e08b",
-      input={
-        "prompt": "an armchair in a room full of plants",
-        "image": open("path/to/outpainting-source.jpg", "rb"),
-        "mask": open("path/to/outpainting-mask.jpg", "rb")
-      }
-    )
-    print(output)
-    breakpoint()
-    '''
     pipe = pipeline(task="depth-estimation", \
                     torch_dtype=torch.float16, \
                     model="LiheYoung/depth-anything-large-hf", 
@@ -114,8 +104,11 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
         mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
 
-        left_img, right_img = prep_pil(pil_img, black=True)
-        left_mask, right_mask = prep_pil(mask_image, black=True)
+        #left_img, right_img = prep_pil(pil_img, black=True)
+        #left_mask, right_mask = prep_pil(mask_image, black=True)
+
+        left_img, left_mask = expand_image_and_create_mask(pil_img, int(56*1.5), side='left')
+        right_img, right_mask = expand_image_and_create_mask(pil_img, int(56*1.5), side='right')
 
         left_img_v2 = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
         right_img_v2 = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
@@ -132,8 +125,14 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         new_right_mask[:, int(-56*1.5):] = 255.0
         new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
 
-        right_init = generate_outpainted_image(right_img_v2, new_right_mask)
-        left_init = generate_outpainted_image(left_img_v2, new_left_mask)
+        right_init = run_inpainting_pipeline(right_img_v2, new_right_mask, prompt="indoor kitchen scene")
+        left_init = run_inpainting_pipeline(left_img_v2, new_left_mask, prompt="indoor kitchen scene")
+
+        #right_init = run_replicate_with_pil(right_img_v2, new_right_mask, prompt='indoor kitchen scene')
+        #left_init = run_replicate_with_pil(left_img_v2, new_left_mask, prompt='indoor kitchen scene')
+
+        #right_init = generate_outpainted_image(right_img_v2, new_right_mask)
+        #left_init = generate_outpainted_image(left_img_v2, new_left_mask)
 
         #right_init, mod_right_mask = run(right_img_v2, new_right_mask)
         #left_init, mod_left_mask = run(left_img_v2, new_left_mask)
