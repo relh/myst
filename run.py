@@ -17,11 +17,13 @@ import numpy as np
 import rerun as rr  # pip install rerun-sdk
 import torch
 import torch.nn.functional as F
-from diffusers import StableDiffusionInpaintPipeline, AutoPipelineForInpainting
+from diffusers import AutoPipelineForInpainting, StableDiffusionInpaintPipeline
 from PIL import Image
 from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model
+from misc.outpainting import run
+from misc.control import generate_outpainted_image
 from utils import *
 
 
@@ -121,25 +123,33 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
         new_left_mask = torch.zeros(512, 512)
-        new_left_mask[:, :int(-56*1.5)] = 255.0
-        #new_left_mask[:, :int(56*1.5)] = 255.0
+        #new_left_mask[:, :int(-56*1.5)] = 255.0
+        new_left_mask[:, :int(56*1.5)] = 255.0
         new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
-        left_img_v3 = inpaint_pipe(prompt='kitchen', image=left_img_v2, mask_image=new_left_mask, strength=1.00).images[0]
-        left_img_v4 = inpaint_pipe.image_processor.apply_overlay(new_left_mask, left_img_v2, left_img_v3)
 
         new_right_mask = torch.zeros(512, 512)
-        new_right_mask[:, int(56*1.5):] = 255.0
-        #new_right_mask[:, int(-56*1.5):] = 255.0
+        #new_right_mask[:, int(56*1.5):] = 255.0
+        new_right_mask[:, int(-56*1.5):] = 255.0
         new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
-        right_img_v3 = inpaint_pipe(prompt='kitchen', image=right_img_v2, mask_image=new_right_mask, strength=1.00).images[0]
-        right_img_v4 = inpaint_pipe.image_processor.apply_overlay(new_right_mask, right_img_v2, right_img_v3)
+
+        right_init = generate_outpainted_image(right_img_v2, new_right_mask)
+        left_init = generate_outpainted_image(left_img_v2, new_left_mask)
+
+        #right_init, mod_right_mask = run(right_img_v2, new_right_mask)
+        #left_init, mod_left_mask = run(left_img_v2, new_left_mask)
+
+        #left_img_v3 = inpaint_pipe(prompt='kitchen', image=left_init, mask_image=mod_left_mask, strength=0.60).images[0]
+        #left_img_v4 = inpaint_pipe.image_processor.apply_overlay(mod_left_mask, left_img_v2, left_img_v3)
+
+        #right_img_v3 = inpaint_pipe(prompt='kitchen', image=right_init, mask_image=mod_right_mask, strength=0.60).images[0]
+        #right_img_v4 = inpaint_pipe.image_processor.apply_overlay(mod_right_mask, right_img_v2, right_img_v3)
 
         # Visualizing the optimized generated image
-        right_img_v2.save('images/right_img.png')
-        left_img_v2.save('images/left_img.png')
-        new_right_mask.save('images/right_mask.png')
-        new_left_mask.save('images/left_mask.png')
-        fig, ax = plt.subplots(2, 6, figsize=(10,15))
+        #right_img_v2.save('images/right_img.png')
+        #left_img_v2.save('images/left_img.png')
+        #new_right_mask.save('images/right_mask.png')
+        #new_left_mask.save('images/left_mask.png')
+        fig, ax = plt.subplots(2, 7, figsize=(10,15))
         ax[0, 0].imshow(left_img)
         ax[1, 0].imshow(right_img)
         ax[0, 1].imshow(left_mask)
@@ -148,10 +158,12 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         ax[1, 2].imshow(right_img_v2)
         ax[0, 3].imshow(new_left_mask)
         ax[1, 3].imshow(new_right_mask)
-        ax[0, 4].imshow(left_img_v3)
-        ax[1, 4].imshow(right_img_v3)
-        ax[0, 5].imshow(left_img_v4)
-        ax[1, 5].imshow(right_img_v4)
+        ax[0, 4].imshow(left_init)
+        ax[1, 4].imshow(right_init)
+        #ax[0, 5].imshow(left_img_v3)
+        #ax[1, 5].imshow(right_img_v3)
+        #ax[0, 6].imshow(left_img_v4)
+        #ax[1, 6].imshow(right_img_v4)
         plt.tight_layout()
         plt.show()
         import sys
