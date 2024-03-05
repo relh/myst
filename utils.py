@@ -52,8 +52,8 @@ def prep_pil(pil_img, black=False):
         right_image = image.crop((split_point, 0, width, height))
 
         # Pad the images
-        left_padded = ImageOps.expand(left_image, (256-split_point, 0, 0, 0), fill='white')
-        right_padded = ImageOps.expand(right_image, (0, 0, 256-split_point, 0), fill='white')
+        left_padded = ImageOps.expand(left_image, (256-split_point, 0, 0, 0), fill='black')
+        right_padded = ImageOps.expand(right_image, (0, 0, 256-split_point, 0), fill='black')
 
         # Save or display the images
         return left_padded, right_padded

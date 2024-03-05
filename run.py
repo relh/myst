@@ -121,18 +121,24 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
         new_left_mask = torch.zeros(512, 512)
-        new_left_mask[:, :int(56*1.5)] = 255.0
+        new_left_mask[:, :int(-56*1.5)] = 255.0
+        #new_left_mask[:, :int(56*1.5)] = 255.0
         new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
         left_img_v3 = inpaint_pipe(prompt='kitchen', image=left_img_v2, mask_image=new_left_mask, strength=1.00).images[0]
         left_img_v4 = inpaint_pipe.image_processor.apply_overlay(new_left_mask, left_img_v2, left_img_v3)
 
         new_right_mask = torch.zeros(512, 512)
-        new_right_mask[:, int(-56*1.5):] = 255.0
+        new_right_mask[:, int(56*1.5):] = 255.0
+        #new_right_mask[:, int(-56*1.5):] = 255.0
         new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
         right_img_v3 = inpaint_pipe(prompt='kitchen', image=right_img_v2, mask_image=new_right_mask, strength=1.00).images[0]
         right_img_v4 = inpaint_pipe.image_processor.apply_overlay(new_right_mask, right_img_v2, right_img_v3)
 
         # Visualizing the optimized generated image
+        right_img_v2.save('images/right_img.png')
+        left_img_v2.save('images/left_img.png')
+        new_right_mask.save('images/right_mask.png')
+        new_left_mask.save('images/left_mask.png')
         fig, ax = plt.subplots(2, 6, figsize=(10,15))
         ax[0, 0].imshow(left_img)
         ax[1, 0].imshow(right_img)
