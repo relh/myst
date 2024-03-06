@@ -20,13 +20,14 @@ import torch
 import torch.nn.functional as F
 from diffusers import AutoPipelineForInpainting, StableDiffusionInpaintPipeline
 from PIL import Image
+from torchvision.transforms import ToPILImage, ToTensor
 from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model
+from misc.colab import run_inpainting_pipeline
 from misc.control import generate_outpainted_image
 from misc.outpainting import run
 from misc.replicate_me import run_replicate_with_pil
-from misc.colab import run_inpainting_pipeline
 from utils import *
 
 
@@ -48,14 +49,14 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
                     model="LiheYoung/depth-anything-large-hf", 
                     device="cuda:0")
 
-    inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
-        "runwayml/stable-diffusion-inpainting", \
-        torch_dtype=torch.float16)
+    #inpaint_pipe = StableDiffusionInpaintPipeline.from_pretrained( \
+    #    "runwayml/stable-diffusion-inpainting", \
+    #    torch_dtype=torch.float16)
 
     #inpaint_pipe = AutoPipelineForInpainting.from_pretrained(
     #    "kandinsky-community/kandinsky-2-2-decoder-inpaint", 
     #    torch_dtype=torch.float16)
-    inpaint_pipe = inpaint_pipe.to("cuda:0")
+    #inpaint_pipe = inpaint_pipe.to("cuda:0")
 
     # Iterate through images (video frames) logging data related to each frame.
     image_file = None
@@ -104,51 +105,29 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
         mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
 
-        #left_img, right_img = prep_pil(pil_img, black=True)
-        #left_mask, right_mask = prep_pil(mask_image, black=True)
+        left_img, right_img = prep_pil(pil_img)
+        left_mask, right_mask = prep_pil(mask_image)
 
-        left_img, left_mask = expand_image_and_create_mask(pil_img, int(56*1.5), side='left')
-        right_img, right_mask = expand_image_and_create_mask(pil_img, int(56*1.5), side='right')
-
-        left_img_v2 = inpaint_pipe(prompt='', image=left_img, mask_image=left_mask, strength=0.05).images[0]
-        right_img_v2 = inpaint_pipe(prompt='', image=right_img, mask_image=right_mask, strength=0.05).images[0]
+        liv2 = fill_missing_values_batched(left_img, left_mask)
+        riv2 = fill_missing_values_batched(right_img, right_mask)
 
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
-        new_left_mask = torch.zeros(512, 512)
-        #new_left_mask[:, :int(-56*1.5)] = 255.0
-        new_left_mask[:, :int(56*1.5)] = 255.0
-        new_left_mask = Image.fromarray(new_left_mask.cpu().numpy()).convert("L")
+        new_left_mask = make_square_mask(side='left')
+        new_right_mask = make_square_mask(side='right')
 
-        new_right_mask = torch.zeros(512, 512)
-        #new_right_mask[:, int(56*1.5):] = 255.0
-        new_right_mask[:, int(-56*1.5):] = 255.0
-        new_right_mask = Image.fromarray(new_right_mask.cpu().numpy()).convert("L")
+        #liv2 *= 255.0
+        #riv2 *= 255.0
+        #liv2[:, :, :int(56*0.5)] = -1
+        #riv2[:, :, int(-56*0.5):] = -1
+
+        left_img_v2 = ToPILImage()(liv2.permute(2,0,1))
+        right_img_v2 = ToPILImage()(riv2.permute(2,0,1))
 
         right_init = run_inpainting_pipeline(right_img_v2, new_right_mask, prompt="indoor kitchen scene")
         left_init = run_inpainting_pipeline(left_img_v2, new_left_mask, prompt="indoor kitchen scene")
 
-        #right_init = run_replicate_with_pil(right_img_v2, new_right_mask, prompt='indoor kitchen scene')
-        #left_init = run_replicate_with_pil(left_img_v2, new_left_mask, prompt='indoor kitchen scene')
-
-        #right_init = generate_outpainted_image(right_img_v2, new_right_mask)
-        #left_init = generate_outpainted_image(left_img_v2, new_left_mask)
-
-        #right_init, mod_right_mask = run(right_img_v2, new_right_mask)
-        #left_init, mod_left_mask = run(left_img_v2, new_left_mask)
-
-        #left_img_v3 = inpaint_pipe(prompt='kitchen', image=left_init, mask_image=mod_left_mask, strength=0.60).images[0]
-        #left_img_v4 = inpaint_pipe.image_processor.apply_overlay(mod_left_mask, left_img_v2, left_img_v3)
-
-        #right_img_v3 = inpaint_pipe(prompt='kitchen', image=right_init, mask_image=mod_right_mask, strength=0.60).images[0]
-        #right_img_v4 = inpaint_pipe.image_processor.apply_overlay(mod_right_mask, right_img_v2, right_img_v3)
-
-        # Visualizing the optimized generated image
-        #right_img_v2.save('images/right_img.png')
-        #left_img_v2.save('images/left_img.png')
-        #new_right_mask.save('images/right_mask.png')
-        #new_left_mask.save('images/left_mask.png')
-        fig, ax = plt.subplots(2, 7, figsize=(10,15))
+        fig, ax = plt.subplots(2, 5, figsize=(10,15))
         ax[0, 0].imshow(left_img)
         ax[1, 0].imshow(right_img)
         ax[0, 1].imshow(left_mask)
@@ -159,10 +138,6 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         ax[1, 3].imshow(new_right_mask)
         ax[0, 4].imshow(left_init)
         ax[1, 4].imshow(right_init)
-        #ax[0, 5].imshow(left_img_v3)
-        #ax[1, 5].imshow(right_img_v3)
-        #ax[0, 6].imshow(left_img_v4)
-        #ax[1, 6].imshow(right_img_v4)
         plt.tight_layout()
         plt.show()
         import sys

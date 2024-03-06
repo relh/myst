@@ -31,92 +31,38 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 #torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
-
-from PIL import Image
-
-def expand_image_and_create_mask(image, expand_width, side='right', fill=(0, 0, 0)):
-    """
-    Expand an image on the specified side and create a corresponding mask.
-    
-    Args:
-        image (PIL.Image): Original image.
-        expand_width (int): Number of pixels to expand the image by.
-        side (str): Side to expand the image on ('left' or 'right').
-        fill (tuple): Fill color for the expanded area (used for the mask).
-    
-    Returns:
-        PIL.Image: Expanded image.
-        PIL.Image: Mask image indicating new (to be inpainted) areas.
-    """
-    # Create new image with expanded width
-    new_width = image.width + expand_width
-    expanded_image = Image.new("RGB", (new_width, image.height), fill)
-
-    # Paste the original image onto the expanded canvas based on the specified side
+def make_square_mask(side='left'):
+    new_mask = torch.zeros(256, 256)
     if side == 'left':
-        expanded_image.paste(image, (expand_width, 0))
-    elif side == 'right':
-        expanded_image.paste(image, (0, 0))
+        new_mask[:, :int(56*0.5)] = 255.0
     else:
-        raise ValueError("Unsupported side. Use 'left' or 'right'.")
+        new_mask[:, int(-56*0.5):] = 255.0
+    new_mask = Image.fromarray(new_mask.cpu().numpy()).convert("L")
+    return new_mask
 
-    # Create a mask for the expanded area
-    mask = Image.new("L", (new_width, image.height), 0)  # Fill with 0 (unchanged)
-    if side == 'left':
-        mask.paste(255, (0, 0, expand_width, image.height))  # New area set to 255 (to be inpainted)
-    elif side == 'right':
-        mask.paste(255, (image.width, 0, new_width, image.height))  # New area set to 255 (to be inpainted)
-
-    return expanded_image, mask
-
-def generate_noise_image(width, height):
-    """
-    Generate a noise image of specified width and height.
-    """
-    noise_array = np.random.rand(height, width, 3) * 255
-    noise_image = Image.fromarray(noise_array.astype('uint8')).convert('RGB')
-    return noise_image
-
-def prep_pil(pil_img, black=False):
+def prep_pil(pil_img):
     """
     Turns a 456x256 image into two square images padded with noise to make them 256x256.
     """
-    if black:
-        # turns ek 456x256 img into two square 256ers 
-        image = pil_img
-        width, height = image.size
-        split_point = width // 2
-        left_image = image.crop((0, 0, split_point, height))
-        right_image = image.crop((split_point, 0, width, height))
-
-        # Pad the images
-        left_padded = ImageOps.expand(left_image, (256-split_point, 0, 0, 0), fill='black')
-        right_padded = ImageOps.expand(right_image, (0, 0, 256-split_point, 0), fill='black')
-
-        # Save or display the images
-        return left_padded, right_padded
-
+    # turns ek 456x256 img into two square 256ers 
+    #if mask:
+    #    image = pil_img
+    #else:
+    #    b, g, r = pil_img.split()
+    # 
+    #     # Reassemble the image with bands in the correct order
+    #     image = Image.merge("RGB", (r, g, b))
     image = pil_img
     width, height = image.size
     split_point = width // 2
-    
     left_image = image.crop((0, 0, split_point, height))
     right_image = image.crop((split_point, 0, width, height))
-    
-    # Generate noise images for padding
-    left_noise = generate_noise_image(256 - split_point, height)
-    right_noise = generate_noise_image(256 - split_point, height)
-    
-    # Create new images with noise padding
-    left_padded = Image.new('RGB', (256, height))
-    right_padded = Image.new('RGB', (256, height))
-    
-    left_padded.paste(left_noise, (0, 0))
-    left_padded.paste(left_image, (256 - split_point, 0))
-    
-    right_padded.paste(right_image, (0, 0))
-    right_padded.paste(right_noise, (split_point, 0))
-    
+
+    # Pad the images
+    left_padded = ImageOps.expand(left_image, (256-split_point, 0, 0, 0), fill='black')
+    right_padded = ImageOps.expand(right_image, (0, 0, 256-split_point, 0), fill='black')
+
+    # Save or display the images
     return left_padded, right_padded
 
 def save_rgba_image(rgb_image, mask, file_path):
@@ -138,10 +84,12 @@ def save_rgba_image(rgb_image, mask, file_path):
     # Save the image
     rgba_pil.save(file_path, 'PNG')
 
+
 def fill_missing_values_batched(image, mask):
     # Ensure image is in float and mask is repeated for each channel
-    image = image.float()
-    mask = repeat(mask, 'h w -> h w c', c=3).float()
+    #image = torch.tensor(np.array(image)).float()
+    image = (ToTensor()(image)).float().clone()
+    mask = repeat(torch.tensor(np.array(mask)), 'h w -> h w c', c=3).float()
 
     # Invert the mask for processing: 1 for valid pixels, 0 for missing
     valid_mask = 1 - mask
@@ -150,7 +98,7 @@ def fill_missing_values_batched(image, mask):
     kernel = torch.ones((3, 1, 3, 3), dtype=torch.float32)
 
     # Rearrange image and valid_mask for convolution
-    image_batch = rearrange(image, 'h w c -> (1) c h w')
+    image_batch = rearrange(image, 'c h w -> (1) c h w')
     valid_mask_batch = rearrange(valid_mask, 'h w c -> (1) c h w')
 
     # Convolve image and valid_mask with the kernel

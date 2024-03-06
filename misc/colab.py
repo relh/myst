@@ -38,7 +38,7 @@ def initialize_pipeline():
     pipeline.enable_model_cpu_offload()
 
 # Function to run inpainting pipeline
-def run_inpainting_pipeline(input_image: Image, mask_image: Image, prompt: str, seed: int = 12345):
+def run_inpainting_pipeline(input_image: Image, mask_image: Image, prompt: str, seed: int = 12345, strength: float = 1.0):
     global pipeline
     if pipeline is None:
         initialize_pipeline()
@@ -49,9 +49,10 @@ def run_inpainting_pipeline(input_image: Image, mask_image: Image, prompt: str, 
         prompt,
         image=input_image,
         mask_image=mask_image,
-        height=1024,
-        width=1024,
+        height=256,
+        width=256,
         generator=generator,
+        strength=strength
     )
     return output.images[0]
 
