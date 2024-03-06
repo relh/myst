@@ -24,7 +24,7 @@ from torchvision.transforms import ToPILImage, ToTensor
 from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model
-from misc.colab import run_inpainting_pipeline
+from misc.colab import run_inpainting_pipeline, create_outpainting_image_and_mask
 from misc.control import generate_outpainted_image
 from misc.outpainting import run
 from misc.replicate_me import run_replicate_with_pil
@@ -102,42 +102,22 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         image[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
         # --- speckle pipeline ---
-        mask_image = torch.where((image.sum(dim=2) == 0), 1, 0).float()
-        mask_image = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
-
-        left_img, right_img = prep_pil(pil_img)
-        left_mask, right_mask = prep_pil(mask_image)
-
-        liv2 = fill_missing_values_batched(left_img, left_mask)
-        riv2 = fill_missing_values_batched(right_img, right_mask)
+        mask_img = torch.where((image.sum(dim=2) == 0), 1, 0).float()
+        mask_img = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
+        despeckled_img = fill_missing_values_batched(pil_img, mask_img)
 
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
-        new_left_mask = make_square_mask(side='left')
-        new_right_mask = make_square_mask(side='right')
+        big_img, big_mask = create_outpainting_image_and_mask(despeckled_img, zoom=0.95)
 
-        #liv2 *= 255.0
-        #riv2 *= 255.0
-        #liv2[:, :, :int(56*0.5)] = -1
-        #riv2[:, :, int(-56*0.5):] = -1
+        big_init = run_inpainting_pipeline(big_img, big_mask, prompt="ego-centric camera indoor epic-kitchens view")
 
-        left_img_v2 = ToPILImage()(liv2.permute(2,0,1))
-        right_img_v2 = ToPILImage()(riv2.permute(2,0,1))
-
-        right_init = run_inpainting_pipeline(right_img_v2, new_right_mask, prompt="indoor kitchen scene")
-        left_init = run_inpainting_pipeline(left_img_v2, new_left_mask, prompt="indoor kitchen scene")
-
-        fig, ax = plt.subplots(2, 5, figsize=(10,15))
-        ax[0, 0].imshow(left_img)
-        ax[1, 0].imshow(right_img)
-        ax[0, 1].imshow(left_mask)
-        ax[1, 1].imshow(right_mask)
-        ax[0, 2].imshow(left_img_v2)
-        ax[1, 2].imshow(right_img_v2)
-        ax[0, 3].imshow(new_left_mask)
-        ax[1, 3].imshow(new_right_mask)
-        ax[0, 4].imshow(left_init)
-        ax[1, 4].imshow(right_init)
+        fig, ax = plt.subplots(2, 3, figsize=(10,7))
+        ax[0, 0].imshow(pil_img)
+        ax[1, 0].imshow(mask_img)
+        ax[0, 1].imshow(big_img)
+        ax[1, 1].imshow(big_mask)
+        ax[0, 2].imshow(big_init)
         plt.tight_layout()
         plt.show()
         import sys
@@ -146,6 +126,8 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         # --- apply delta extrinsics ---
         # TODO
+        # TODO keep midline approach
+        # TODO get real
 
         # --- rerun logging --- 
         '''

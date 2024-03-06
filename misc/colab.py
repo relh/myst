@@ -1,35 +1,57 @@
 # inpainting_pipeline.py
+import numpy as np
 import PIL
 import torch
 from diffusers import StableDiffusionXLInpaintPipeline
-from kornia.geometry.transform import get_affine_matrix2d, warp_affine
+from einops import rearrange, repeat
+from kornia.geometry.transform import (get_affine_matrix2d,
+                                       get_rotation_matrix2d, warp_affine)
 from PIL import Image
 from torchvision.transforms import ToPILImage, ToTensor
 
 # Global variable for the pipeline
 pipeline = None
 
-# Zooms out of a given image, and creates an outpainting mask for the external area.
-def create_outpainting_image_and_mask(image, zoom):
-    image_tensor = ToTensor()(image).unsqueeze(0)  # Convert PIL Image to tensor
-    _, c, h, w = image_tensor.shape
+def create_outpainting_image_and_mask(image: Image, zoom: float):
+    # Convert PIL Image to tensor without normalization, in floating point
+    image_np = np.array(image).astype(np.float32)
+    image_tensor = rearrange(image_np, 'h w c -> 1 c h w')
+    image_tensor = torch.from_numpy(image_tensor)
 
-    center = torch.tensor([h / 2, w / 2]).unsqueeze(0)
-    zoom = torch.tensor([zoom, zoom]).unsqueeze(0)
-    translate = torch.tensor([0.0, 0.0]).unsqueeze(0)
+    _, c, h, w = image_tensor.shape
+    new_dim = max(h, w)
+    square_size = int(new_dim / zoom)  # Square canvas size after zoom
+
+    # Center the image on the new canvas by calculating the translation
+    translate_x = (square_size - w * zoom) / 2.0
+    translate_y = (square_size - h * zoom) / 2.0
+
+    # Prepare for affine transformation
+    center = torch.tensor([w / 2, h / 2]).unsqueeze(0)
+    scale = torch.tensor([zoom, zoom]).unsqueeze(0)
+    translate = torch.tensor([translate_x, translate_y]).unsqueeze(0)
     angle = torch.tensor([0.0])
 
-    M = get_affine_matrix2d(center=center, translations=translate, angle=angle, scale=zoom)
+    # Calculate the affine transformation matrix
+    M = get_affine_matrix2d(center=center, angle=angle, scale=scale, translations=translate)
 
-    mask_image_tensor = warp_affine(image_tensor, M=M[:, :2], dsize=(h, w), padding_mode="fill", fill_value=-1*torch.ones(3))
-    mask = torch.where(mask_image_tensor < 0, 1.0, 0.0)
+    # Apply affine transformation with specific fill_value for inpainting areas
+    transformed_image_tensor = warp_affine(image_tensor, M=M[:, :2], dsize=(square_size, square_size), 
+                                           padding_mode="fill", fill_value=-1.0*torch.ones(3))
 
-    transformed_image_tensor = warp_affine(image_tensor, M=M[:, :2], dsize=(h, w), padding_mode="border")
+    # Creating mask: Identify areas with fill_value as needing inpainting
+    mask = torch.where(transformed_image_tensor == -1.0, torch.ones_like(transformed_image_tensor), torch.zeros_like(transformed_image_tensor))
 
-    output_mask = ToPILImage()(mask[0])
-    output_image = ToPILImage()(transformed_image_tensor[0])
+    # Convert the transformed image tensor back to a PIL Image, handling negative values appropriately
+    transformed_image_np = rearrange(transformed_image_tensor, '1 c h w -> h w c').numpy()
+    transformed_image_np = np.clip(transformed_image_np, 0, 255)  # Ensure values are within byte range
+    transformed_image = Image.fromarray(transformed_image_np.astype(np.uint8))
 
-    return output_image, output_mask
+    # Convert the mask tensor to a PIL Image, considering only one channel since all will be the same
+    mask_np = rearrange(mask, '1 c h w -> h w c').squeeze().numpy()
+    mask_image = Image.fromarray((mask_np * 255).astype(np.uint8))
+
+    return transformed_image, mask_image
 
 def initialize_pipeline():
     global pipeline
@@ -49,8 +71,8 @@ def run_inpainting_pipeline(input_image: Image, mask_image: Image, prompt: str, 
         prompt,
         image=input_image,
         mask_image=mask_image,
-        height=256,
-        width=256,
+        height=512,
+        width=512,
         generator=generator,
         strength=strength
     )

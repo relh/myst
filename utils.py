@@ -87,8 +87,7 @@ def save_rgba_image(rgb_image, mask, file_path):
 
 def fill_missing_values_batched(image, mask):
     # Ensure image is in float and mask is repeated for each channel
-    #image = torch.tensor(np.array(image)).float()
-    image = (ToTensor()(image)).float().clone()
+    image = rearrange(torch.tensor(np.array(image)), 'h w c -> c h w').float()
     mask = repeat(torch.tensor(np.array(mask)), 'h w -> h w c', c=3).float()
 
     # Invert the mask for processing: 1 for valid pixels, 0 for missing
