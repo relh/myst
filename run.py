@@ -40,8 +40,8 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # Filter out noisy points
         sparse_points3d = {id: point for id, point in sparse_points3d.items() if point.rgb.any() and len(point.image_ids) > 4}
 
-    #rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
-    #rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
+    rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
+    rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     # --- pipeline setup ---
     pipe = pipeline(task="depth-estimation", \
@@ -70,6 +70,8 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         if image_file is None: 
             image_file = dataset_path / "images" / image.name
             pil_img = Image.open(str(image_file))
+        else:
+            pil_img = Image.fromarray(despeckled_img.cpu().numpy().astype('uint8'))
 
         # --- setup camera ---
         quat_xyzw = image.qvec[[1, 2, 3, 0]]  # COLMAP uses wxyz quaternions
@@ -102,18 +104,14 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --- despeckle pipeline ---
         mask_img = torch.where((image_t.sum(dim=2) == 0), 1, 0).float()
         mask_img = Image.fromarray((torch.where((image_t.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
-        despeckled_img = fill_missing_values_batched(pil_img, mask_img)
-
+        #despeckled_img = fill_missing_values_batched(pil_img, mask_img)
+        despeckled_img = image_t #fill_missing_values_batched(pil_img, mask_img)
         breakpoint()
-        # --- apply delta extrinsics ---
-        #quat_xyzw = image.qvec[[1, 2, 3, 0]]  # COLMAP uses wxyz quaternions
-        #next_extrinsics = get_camera_extrinsic_matrix(all_images[idx+1]).cuda()
-        # TODO get real
 
         '''
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
-        breakpoint()
+        #breakpoint()
         big_img, big_mask = create_outpainting_image_and_mask(despeckled_img, zoom=0.95)
         big_init = run_inpainting_pipeline(big_img, big_mask, strength=1.00, prompt="A photo of a kitchen.")
 
@@ -131,12 +129,11 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         '''
 
         # --- rerun logging --- 
-        '''
         rr.set_time_sequence("frame", idx+1)
-        #rr.log("dense_points", rr.Points3D(dense_points3d, colors=colors))
+        rr.log("dense_points", rr.Points3D(dense_points3d.cpu().numpy(), colors=colors))
 
         rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=[99, 99, 99]))
-        rr.log("camera/image/dense_keypoints", rr.Points2D(proj_da.cpu().numpy(), colors=[167, 138, 34]))
+        #rr.log("camera/image/dense_keypoints", rr.Points2D(proj_da.cpu().numpy(), colors=[167, 138, 34]))
 
         # COLMAP's camera transform is "camera from world"
         rr.log("camera", rr.Transform3D(translation=image.tvec, rotation=rr.Quaternion(xyzw=quat_xyzw), from_parent=True))
@@ -152,32 +149,20 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
             ),
         )
 
-        if True:
-            #rgb = None
-            bgr = cv2.imread(str(image_file))
-            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            rr.log("camera/image", rr.Image(rgb).compress(jpeg_quality=75))
-        elif resize:
-            bgr = cv2.imread(str(image_file))
-            bgr = cv2.resize(bgr, resize)
-            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-            rr.log("camera/image", rr.Image(rgb).compress(jpeg_quality=75))
-        else:
-            rr.log("camera/image", rr.ImageEncoded(path=dataset_path / "images" / image.name))
-        '''
+        rgb = np.array(pil_img)
+        rr.log("camera/image", rr.Image(rgb).compress(jpeg_quality=75))
 
-        if idx > 30: breakpoint()
-
+        if idx > 100: breakpoint()
 
 def main() -> None:
     parser = ArgumentParser(description="Visualize the output of COLMAP's sparse reconstruction on a video.")
-    #rr.script_add_args(parser)
+    rr.script_add_args(parser)
     args = parser.parse_args()
 
-    #rr.script_setup(args, "2myst")
+    rr.script_setup(args, "3myst")
     dataset_path = Path('/mnt/sda/epic-fields/p01_04/')
     read_and_log_sparse_reconstruction(dataset_path, filter_output=True, resize=False)
-    #rr.script_teardown(args)
+    rr.script_teardown(args)
 
 
 if __name__ == "__main__":
