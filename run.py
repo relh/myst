@@ -61,7 +61,8 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
     # Iterate through images (video frames) logging data related to each frame.
     image_file = None
     num_images = len(images.values())
-    for idx, image in enumerate(sorted(images.values(), key=lambda im: im.name)):  # type: ignore[no-any-return]
+    all_images = list(sorted(images.values(), key=lambda im: im.name))
+    for idx, image in enumerate(all_images):
         if idx % 10 == 0:
             print(f'{idx} / {num_images}')
 
@@ -70,47 +71,51 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
             image_file = dataset_path / "images" / image.name
             pil_img = Image.open(str(image_file))
 
-        # setup camera
+        # --- setup camera ---
         quat_xyzw = image.qvec[[1, 2, 3, 0]]  # COLMAP uses wxyz quaternions
         camera = cameras[image.camera_id]
         fx, fy, cx, cy, k1, k2, p1, p2 = camera.params
-
-        # --- move camera details to cuda ---
         intrinsics = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]).float().cuda()
         extrinsics = get_camera_extrinsic_matrix(image).cuda()
-        dense_points3d = torch.tensor(dense_points3d).float().cuda()
 
         # --- project 3D points ---
+        dense_points3d = torch.tensor(dense_points3d).float().cuda()
         proj_colmap, proj_dyn, colmap_depth, vis_colmap_3d, vis_dyn_3d, vis_colmap_colors, vis_dyn_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask=None)
         da_depth = F.interpolate(pipe(pil_img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
         aligned_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
 
         img_tensor = torch.tensor(np.array(pil_img), device=aligned_da_depth.device)
         da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, img_tensor)
-        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = points_3d_to_image(da_3d, da_colors, intrinsics, extrinsics, (camera.height, camera.width))
+
+        next_extrinsics = get_camera_extrinsic_matrix(all_images[idx+1]).cuda()
+        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = points_3d_to_image(da_3d, da_colors, intrinsics, next_extrinsics, (camera.height, camera.width))
 
         # Initialize a black image of size (256, 456, 3)
-        image_size = (256, 456, 3)
-        image = torch.zeros(image_size, dtype=torch.uint8).cuda()
-
         # Convert proj_da to integer and clamp to image size
+        image_size = (256, 456, 3)
+        image_t = torch.zeros(image_size, dtype=torch.uint8).cuda()
         proj_da = proj_da.long()
         proj_da[:, 0] = proj_da[:, 0].clamp(0, image_size[1] - 1)
         proj_da[:, 1] = proj_da[:, 1].clamp(0, image_size[0] - 1)
+        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
-        # Using advanced indexing to directly place colors at the projected points
-        image[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
-
-        # --- speckle pipeline ---
-        mask_img = torch.where((image.sum(dim=2) == 0), 1, 0).float()
-        mask_img = Image.fromarray((torch.where((image.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
+        # --- despeckle pipeline ---
+        mask_img = torch.where((image_t.sum(dim=2) == 0), 1, 0).float()
+        mask_img = Image.fromarray((torch.where((image_t.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
         despeckled_img = fill_missing_values_batched(pil_img, mask_img)
 
+        breakpoint()
+        # --- apply delta extrinsics ---
+        #quat_xyzw = image.qvec[[1, 2, 3, 0]]  # COLMAP uses wxyz quaternions
+        #next_extrinsics = get_camera_extrinsic_matrix(all_images[idx+1]).cuda()
+        # TODO get real
+
+        '''
         # --- sideways pipeline ---
         # split up image into two halves and in-paint
+        breakpoint()
         big_img, big_mask = create_outpainting_image_and_mask(despeckled_img, zoom=0.95)
-
-        big_init = run_inpainting_pipeline(big_img, big_mask, prompt="ego-centric camera indoor epic-kitchens view")
+        big_init = run_inpainting_pipeline(big_img, big_mask, strength=1.00, prompt="A photo of a kitchen.")
 
         fig, ax = plt.subplots(2, 3, figsize=(10,7))
         ax[0, 0].imshow(pil_img)
@@ -123,11 +128,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         import sys
         sys.exit()
         breakpoint()
-
-        # --- apply delta extrinsics ---
-        # TODO
-        # TODO keep midline approach
-        # TODO get real
+        '''
 
         # --- rerun logging --- 
         '''

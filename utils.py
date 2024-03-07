@@ -97,8 +97,8 @@ def fill_missing_values_batched(image, mask):
     kernel = torch.ones((3, 1, 3, 3), dtype=torch.float32)
 
     # Rearrange image and valid_mask for convolution
-    image_batch = rearrange(image, 'c h w -> (1) c h w')
-    valid_mask_batch = rearrange(valid_mask, 'h w c -> (1) c h w')
+    image_batch = rearrange(image, 'c h w -> 1 c h w')
+    valid_mask_batch = rearrange(valid_mask, 'h w c -> 1 c h w')
 
     # Convolve image and valid_mask with the kernel
     sum_neighbors = F.conv2d(image_batch * valid_mask_batch, kernel, padding=1, groups=3)
@@ -108,13 +108,13 @@ def fill_missing_values_batched(image, mask):
     average_values = sum_neighbors / count_neighbors.clamp(min=1)
 
     # Replace missing pixels
-    mask_missing = rearrange(mask, 'h w c -> (1) c h w') == 1
+    mask_missing = rearrange(mask, 'h w c -> 1 c h w') == 1
     image_filled = torch.where(mask_missing, average_values, image_batch)
 
     # Clamp values to the valid range (assuming 8-bit image)
     image_filled = image_filled.clamp(0, 255)
 
-    return rearrange(image_filled, '(1) c h w -> h w c')
+    return rearrange(image_filled, '1 c h w -> h w c')
 
 
 def compute_local_median_scaling(estimated_disparity, colmap_depth, window_size=5):
