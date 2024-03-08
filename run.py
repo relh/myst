@@ -84,7 +84,11 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         dense_points3d = torch.tensor(dense_points3d).float().cuda()
         proj_colmap, proj_dyn, colmap_depth, vis_colmap_3d, vis_dyn_3d, vis_colmap_colors, vis_dyn_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask=None)
         da_depth = F.interpolate(pipe(pil_img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
-        aligned_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
+
+        ransac_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
+        local_da_depth = adjust_disparity(da_depth.squeeze(), colmap_depth.squeeze())
+        wombo_depth = (ransac_da_depth + local_da_depth) / 2.0
+        breakpoint()
 
         img_tensor = torch.tensor(np.array(pil_img), device=aligned_da_depth.device)
         da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, img_tensor)
@@ -107,6 +111,12 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         #despeckled_img = fill_missing_values_batched(pil_img, mask_img)
         despeckled_img = image_t #fill_missing_values_batched(pil_img, mask_img)
         breakpoint()
+
+        # --- pipeline outline ---
+        # after estimating depth, voxel of radius r set in 3D 
+        # when re-estimating for new frame, do lookup, then change
+        # --> in-fill? 
+        # ---> 
 
         '''
         # --- sideways pipeline ---

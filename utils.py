@@ -116,32 +116,6 @@ def fill_missing_values_batched(image, mask):
 
     return rearrange(image_filled, '1 c h w -> h w c')
 
-
-def compute_local_median_scaling(estimated_disparity, colmap_depth, window_size=5):
-    """
-    Compute local median scaling factors using convolution.
-    """
-    mask = colmap_depth != 0
-    masked_colmap = colmap_depth * mask.float()
-
-    # Clamp disparity values to a reasonable range
-    disparity_max = 10000
-    disparity_min = 0.0001
-    estimated_disparity_clamped = torch.clamp(estimated_disparity, 1 / disparity_max, 1 / disparity_min)
-
-    # Calculate scaling factors where colmap_depth is non-zero
-    scaling_factors = torch.zeros_like(estimated_disparity)
-    scaling_factors[mask] = masked_colmap[mask] / estimated_disparity_clamped[mask]
-
-    # Use unfold to extract sliding local blocks
-    unfold = F.unfold(scaling_factors.unsqueeze(0).unsqueeze(0), kernel_size=window_size, padding=window_size//2)
-    unfold = unfold.transpose(1, 2).reshape(-1, window_size * window_size)
-
-    # Compute median scaling factor for each local window
-    local_median_scaling = torch.median(unfold, dim=1)[0].reshape(1, 1, *colmap_depth.shape)
-
-    return local_median_scaling.squeeze()
-
 def compute_local_scaling_factors(estimated_disparity, colmap_depth, window_size=5):
     """
     Compute local scaling factors using convolution for efficient batch processing.
@@ -161,7 +135,6 @@ def compute_local_scaling_factors(estimated_disparity, colmap_depth, window_size
     kernel = torch.ones((1, 1, window_size, window_size), device=colmap_depth.device)
 
     # Compute the sum of scaling factors and the count of non-zero values in each window
-    breakpoint()
     local_sum = F.conv2d(scaling_factors.unsqueeze(0).unsqueeze(0), kernel, padding=window_size//2)
     local_count = F.conv2d(mask.float().unsqueeze(0).unsqueeze(0), kernel, padding=window_size//2)
 
@@ -179,13 +152,13 @@ def adjust_disparity(estimated_disparity, colmap_depth, window_size=3, iteration
     mask = colmap_depth != 0
 
     # Initial adjustment
-    local_scaling = compute_local_median_scaling(estimated_disparity, colmap_depth, window_size)
+    local_scaling = compute_local_scaling_factors(estimated_disparity, colmap_depth, window_size)
     adjusted_disparity = torch.where(mask, colmap_depth, estimated_disparity * local_scaling)
     mask = adjusted_disparity != 0
 
     for _ in range(iterations - 1):
         # Compute scaling factors for the current adjusted_disparity
-        local_scaling = compute_local_median_scaling(estimated_disparity, adjusted_disparity, window_size)
+        local_scaling = compute_local_scaling_factors(estimated_disparity, adjusted_disparity, window_size)
         adjusted_disparity = torch.where(mask, adjusted_disparity, estimated_disparity * local_scaling)
         mask = adjusted_disparity != 0
         if mask.sum() == 0: break
