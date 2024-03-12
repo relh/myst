@@ -88,10 +88,9 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         ransac_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
         local_da_depth = adjust_disparity(da_depth.squeeze(), colmap_depth.squeeze())
         wombo_depth = (ransac_da_depth + local_da_depth) / 2.0
-        breakpoint()
 
-        img_tensor = torch.tensor(np.array(pil_img), device=aligned_da_depth.device)
-        da_3d, da_colors = depth_to_points_3d(aligned_da_depth.squeeze(), intrinsics, extrinsics, img_tensor)
+        img_tensor = torch.tensor(np.array(pil_img), device=wombo_depth.device)
+        da_3d, da_colors = depth_to_points_3d(wombo_depth.squeeze(), intrinsics, extrinsics, img_tensor)
 
         next_extrinsics = get_camera_extrinsic_matrix(all_images[idx+1]).cuda()
         proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = points_3d_to_image(da_3d, da_colors, intrinsics, next_extrinsics, (camera.height, camera.width))
@@ -106,11 +105,11 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
         # --- despeckle pipeline ---
-        mask_img = torch.where((image_t.sum(dim=2) == 0), 1, 0).float()
-        mask_img = Image.fromarray((torch.where((image_t.sum(dim=2) == 0), 1, 0).float() * 255.0).cpu().numpy()).convert('L')
-        #despeckled_img = fill_missing_values_batched(pil_img, mask_img)
-        despeckled_img = image_t #fill_missing_values_batched(pil_img, mask_img)
-        breakpoint()
+        #mask_img = Image.fromarray((torch.where((image_t.sum(dim=2) == 0), 1, 0).float() * 1.0).cpu().numpy()).convert('L')
+        valid_mask_img = torch.where((image_t.sum(dim=2) == 0), 0, 1).float().cuda()
+        #despeckled_img = fill_missing_values_batched(pil_img, valid_mask_img)
+        #despeckled_img = image_t #fill_missing_values_batched(pil_img, mask_img)
+        despeckled_img = mod_fill(image_t).to(torch.uint8)
 
         # --- pipeline outline ---
         # after estimating depth, voxel of radius r set in 3D 

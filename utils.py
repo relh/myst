@@ -31,6 +31,43 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 #torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
+import torch
+import torch.nn.functional as F
+
+# Assuming tensor is your input tensor of shape [456, 256, 3]
+
+def mod_fill(tensor):
+    tensor = tensor.to(torch.float16)
+
+    # Mask of zeros in all channels
+    zero_mask = (tensor == 0).all(dim=-1)
+
+    # Preparing the tensor for convolution
+    tensor_expanded = tensor.permute(2, 0, 1).unsqueeze(0)  # Shape [1, 3, 256, 456]
+
+    # Define the convolution kernel
+    kernel = torch.ones((3, 3), dtype=torch.float32).to(tensor.device)
+    kernel[1, 1] = 0  # Excluding the center pixel from averaging
+    kernel = kernel.unsqueeze(0).unsqueeze(0)  # Shape [1, 1, 3, 3]
+    kernel = kernel.repeat(3, 1, 1, 1)  # Adjust kernel for 3 channels, shape [3, 1, 3, 3]
+
+    # Applying padding
+    padded_tensor = F.pad(tensor_expanded, (1, 1, 1, 1), mode='reflect')
+
+    # Convolution operations to sum and count neighbors
+    sum_neighbors = F.conv2d(padded_tensor, kernel, padding=0, groups=3)
+    non_zero_mask = (padded_tensor != 0).float()
+    count_nonzero_neighbors = F.conv2d(non_zero_mask, kernel, padding=0, groups=3)
+
+    # Calculate the averages
+    average_values = sum_neighbors / count_nonzero_neighbors.clamp(min=1)
+    average_values = average_values.squeeze(0).permute(1, 2, 0)  # Back to original shape [256, 456, 3]
+
+    # Apply the averages to zero values
+    tensor[zero_mask] = average_values[zero_mask]
+    return tensor
+
+
 def make_square_mask(side='left'):
     new_mask = torch.zeros(256, 256)
     if side == 'left':
@@ -84,21 +121,13 @@ def save_rgba_image(rgb_image, mask, file_path):
     # Save the image
     rgba_pil.save(file_path, 'PNG')
 
-
 def fill_missing_values_batched(image, mask):
     # Ensure image is in float and mask is repeated for each channel
-    image = rearrange(torch.tensor(np.array(image)), 'h w c -> c h w').float()
-    mask = repeat(torch.tensor(np.array(mask)), 'h w -> h w c', c=3).float()
-
-    # Invert the mask for processing: 1 for valid pixels, 0 for missing
-    valid_mask = 1 - mask
+    image_batch = rearrange(torch.tensor(np.array(image)), 'h w c -> 1 c h w').float().cuda()
+    valid_mask_batch = repeat(mask, 'h w -> 1 c h w', c=3).float().cuda().half()
 
     # Define a 3x3 kernel for convolution
-    kernel = torch.ones((3, 1, 3, 3), dtype=torch.float32)
-
-    # Rearrange image and valid_mask for convolution
-    image_batch = rearrange(image, 'c h w -> 1 c h w')
-    valid_mask_batch = rearrange(valid_mask, 'h w c -> 1 c h w')
+    kernel = torch.ones((3, 1, 3, 3), dtype=torch.float16).cuda()
 
     # Convolve image and valid_mask with the kernel
     sum_neighbors = F.conv2d(image_batch * valid_mask_batch, kernel, padding=1, groups=3)
@@ -108,8 +137,7 @@ def fill_missing_values_batched(image, mask):
     average_values = sum_neighbors / count_neighbors.clamp(min=1)
 
     # Replace missing pixels
-    mask_missing = rearrange(mask, 'h w c -> 1 c h w') == 1
-    image_filled = torch.where(mask_missing, average_values, image_batch)
+    image_filled = torch.where(mask == 1, average_values, image_batch)
 
     # Clamp values to the valid range (assuming 8-bit image)
     image_filled = image_filled.clamp(0, 255)
