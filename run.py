@@ -60,6 +60,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
     # Iterate through images (video frames) logging data related to each frame.
     image_file = None
+    visualization = False
     num_images = len(images.values())
     all_images = list(sorted(images.values(), key=lambda im: im.name))
     for idx, image in enumerate(all_images):
@@ -71,7 +72,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
             image_file = dataset_path / "images" / image.name
             pil_img = Image.open(str(image_file))
         else:
-            pil_img = Image.fromarray(despeckled_img.cpu().numpy().astype('uint8'))
+            pil_img = Image.fromarray(wombo_img.cpu().numpy().astype('uint8'))
 
         # --- setup camera ---
         quat_xyzw = image.qvec[[1, 2, 3, 0]]  # COLMAP uses wxyz quaternions
@@ -95,21 +96,17 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         next_extrinsics = get_camera_extrinsic_matrix(all_images[idx+1]).cuda()
         proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = points_3d_to_image(da_3d, da_colors, intrinsics, next_extrinsics, (camera.height, camera.width))
 
-        # Initialize a black image of size (256, 456, 3)
         # Convert proj_da to integer and clamp to image size
-        image_size = (256, 456, 3)
-        image_t = torch.zeros(image_size, dtype=torch.uint8).cuda()
+        image_t = torch.zeros((256, 456, 3), dtype=torch.uint8).cuda()
         proj_da = proj_da.long()
-        proj_da[:, 0] = proj_da[:, 0].clamp(0, image_size[1] - 1)
-        proj_da[:, 1] = proj_da[:, 1].clamp(0, image_size[0] - 1)
+        proj_da[:, 0] = proj_da[:, 0].clamp(0, 456 - 1)
+        proj_da[:, 1] = proj_da[:, 1].clamp(0, 256 - 1)
         image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
         # --- despeckle pipeline ---
         #mask_img = Image.fromarray((torch.where((image_t.sum(dim=2) == 0), 1, 0).float() * 1.0).cpu().numpy()).convert('L')
         valid_mask_img = torch.where((image_t.sum(dim=2) == 0), 0, 1).float().cuda()
-        #despeckled_img = fill_missing_values_batched(pil_img, valid_mask_img)
-        #despeckled_img = image_t #fill_missing_values_batched(pil_img, mask_img)
-        despeckled_img = mod_fill(image_t).to(torch.uint8)
+        wombo_img = mod_fill(image_t)
 
         # --- pipeline outline ---
         # after estimating depth, voxel of radius r set in 3D 
@@ -117,38 +114,36 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --> in-fill? 
         # ---> 
 
-        '''
         # --- sideways pipeline ---
-        # split up image into two halves and in-paint
-        #breakpoint()
-        big_img, big_mask = create_outpainting_image_and_mask(despeckled_img, zoom=0.95)
-        big_init = run_inpainting_pipeline(big_img, big_mask, strength=1.00, prompt="A photo of a kitchen.")
+        if idx % 10 == 0:
+            sq_img, sq_mask, pad_h, pad_w = create_outpainting_image_and_mask(wombo_img.cpu().numpy(), zoom=1.00)
+            sq_init = run_inpainting_pipeline(sq_img, sq_mask, strength=1.00, prompt="A photo of a kitchen.")
+            sq_init = torch.tensor(np.array(sq_init)).to('cuda')
 
-        fig, ax = plt.subplots(2, 3, figsize=(10,7))
-        ax[0, 0].imshow(pil_img)
-        ax[1, 0].imshow(mask_img)
-        ax[0, 1].imshow(big_img)
-        ax[1, 1].imshow(big_mask)
-        ax[0, 2].imshow(big_init)
-        plt.tight_layout()
-        plt.show()
-        import sys
-        sys.exit()
-        breakpoint()
-        '''
+            diffused_img = sq_init[pad_h:(None if pad_h == 0 else -pad_h),\
+                                   pad_w:(None if pad_w == 0 else -pad_w)]
+            wombo_img[wombo_img == 0] = diffused_img[wombo_img == 0]
+
+        # --- visualization ---
+        if visualization:
+            fig, ax = plt.subplots(2, 3, figsize=(10,7))
+            ax[0, 0].imshow(pil_img)
+            ax[1, 0].imshow(valid_mask_img.cpu().numpy())
+            ax[0, 1].imshow(sq_img)
+            ax[1, 1].imshow(sq_mask)
+            ax[0, 2].imshow(sq_init.cpu().numpy())
+            ax[1, 2].imshow(diffused_img.cpu().numpy())
+            plt.tight_layout()
+            plt.show()
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
         rr.log("dense_points", rr.Points3D(dense_points3d.cpu().numpy(), colors=colors))
-
         rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=[99, 99, 99]))
         #rr.log("camera/image/dense_keypoints", rr.Points2D(proj_da.cpu().numpy(), colors=[167, 138, 34]))
 
-        # COLMAP's camera transform is "camera from world"
         rr.log("camera", rr.Transform3D(translation=image.tvec, rotation=rr.Quaternion(xyzw=quat_xyzw), from_parent=True))
         rr.log("camera", rr.ViewCoordinates.RDF, timeless=True)  # X=Right, Y=Down, Z=Forward
-
-        # Log camera intrinsics
         rr.log(
             "camera/image",
             rr.Pinhole(
@@ -157,10 +152,8 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
                 principal_point=camera.params[2:],
             ),
         )
-
-        rgb = np.array(pil_img)
-        rr.log("camera/image", rr.Image(rgb).compress(jpeg_quality=75))
-
+        rr.log("camera/image", rr.Image(np.array(pil_img)).compress(jpeg_quality=75))
+        rr.log("camera/mask", rr.Image(np.array(sq_mask)).compress(jpeg_quality=75))
         if idx > 100: breakpoint()
 
 def main() -> None:
