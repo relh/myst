@@ -105,7 +105,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         # --- despeckle pipeline ---
         #mask_img = Image.fromarray((torch.where((image_t.sum(dim=2) == 0), 1, 0).float() * 1.0).cpu().numpy()).convert('L')
-        valid_mask_img = torch.where((image_t.sum(dim=2) == 0), 0, 1).float().cuda()
+        #valid_mask_img = torch.where((image_t.sum(dim=2) <= 10), 0, 1).float().cuda()
         wombo_img = mod_fill(image_t)
 
         # --- pipeline outline ---
@@ -116,13 +116,11 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
 
         # --- sideways pipeline ---
         if idx % 10 == 0:
-            sq_img, sq_mask, pad_h, pad_w = create_outpainting_image_and_mask(wombo_img.cpu().numpy(), zoom=1.00)
-            sq_init = run_inpainting_pipeline(sq_img, sq_mask, strength=1.00, prompt="A photo of a kitchen.")
-            sq_init = torch.tensor(np.array(sq_init)).to('cuda')
-
-            diffused_img = sq_init[pad_h:(None if pad_h == 0 else -pad_h),\
-                                   pad_w:(None if pad_w == 0 else -pad_w)]
-            wombo_img[wombo_img == 0] = diffused_img[wombo_img == 0]
+            sq_img, sq_mask, pad_h, pad_w = create_outpainting_image_and_mask(wombo_img, zoom=1.00)
+            sq_init = run_inpainting_pipeline(sq_img, sq_mask, strength=1.00, prompt="A kitchen.")
+            #diffused_img = sq_init[pad_h:(None if pad_h == 0 else -pad_h),\
+            #                       pad_w:(None if pad_w == 0 else -pad_w)]
+            wombo_img[wombo_img == 0] = sq_init[wombo_img == 0]
 
         # --- visualization ---
         if visualization:
@@ -153,7 +151,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
             ),
         )
         rr.log("camera/image", rr.Image(np.array(pil_img)).compress(jpeg_quality=75))
-        rr.log("camera/mask", rr.Image(np.array(sq_mask)).compress(jpeg_quality=75))
+        #rr.log("camera/image", rr.Image(np.array(sq_mask)[100:-100]).compress(jpeg_quality=75))
         if idx > 100: breakpoint()
 
 def main() -> None:

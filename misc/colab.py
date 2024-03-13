@@ -1,8 +1,11 @@
 # inpainting_pipeline.py
 import numpy as np
 import PIL
+import einops
 import torch
-from diffusers import StableDiffusionXLInpaintPipeline
+import torch.nn.functional as F
+from diffusers import (AutoPipelineForInpainting,
+                       StableDiffusionXLInpaintPipeline)
 from einops import rearrange, repeat
 from kornia.geometry.transform import (get_affine_matrix2d,
                                        get_rotation_matrix2d, warp_affine)
@@ -15,10 +18,9 @@ pipeline = None
 
 def create_outpainting_image_and_mask(image, zoom):
     # Convert the PIL image to a PyTorch tensor
-    image_np = np.array(image).astype(np.float32) / 255.0
-    image_tensor = torch.tensor(rearrange(image_np, 'h w c -> 1 c h w'), dtype=torch.float32)
-    _, c, h, w = image_tensor.shape
+    image_tensor = torch.tensor(rearrange(image / 255.0, 'h w c -> 1 c h w'), dtype=torch.float32)
     '''
+    _, c, h, w = image_tensor.shape
     # Calculate zoom and get affine transformation
     center = torch.tensor([w / 2, h / 2]).unsqueeze(0)
     zoom_tensor = torch.tensor([zoom, zoom]).unsqueeze(0)
@@ -42,11 +44,12 @@ def create_outpainting_image_and_mask(image, zoom):
     # Create mask for the padded area
     mask = torch.zeros(padded_image_tensor.shape[2], padded_image_tensor.shape[3])
     mask[:pad_h, :] = 1
-    mask[-(pad_h+1 if pad_h == 0 else pad_h):, :] = 1
+    mask[(None if pad_h == 0 else -pad_h):, :] = 1
     mask[:, :pad_w] = 1
-    mask[:, -(pad_w+1 if pad_w == 0 else pad_w):] = 1
+    mask[:, (None if pad_w == 0 else -pad_w):] = 1
+    mask[padded_image_tensor.squeeze().sum(dim=0) < 0.03] = 1
 
-    padded_image_array = einops.rearrange(padded_image_tensor, '1 c h w -> h w c').cpu().numpy()
+    padded_image_array = rearrange(padded_image_tensor, '1 c h w -> h w c').cpu().numpy()
     padded_image_array = (padded_image_array * 255).astype(np.uint8)
     mask_array = (mask.numpy() * 255).astype(np.uint8)
 
@@ -57,28 +60,51 @@ def create_outpainting_image_and_mask(image, zoom):
 
 def initialize_pipeline():
     global pipeline
-    MODEL_NAME = "diffusers/stable-diffusion-xl-1.0-inpainting-0.1"
-    pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(MODEL_NAME, torch_dtype=torch.float16, variant='fp16')
+    '''
+    pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(
+                    "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
+                    torch_dtype=torch.float16, variant='fp16')
+    '''
+
+    pipeline = AutoPipelineForInpainting.from_pretrained(\
+                 "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",\
+                 torch_dtype=torch.float16, variant="fp16").to("cuda")
+
     pipeline.enable_model_cpu_offload()
 
 # Function to run inpainting pipeline
-def run_inpainting_pipeline(input_image: Image, mask_image: Image, prompt: str, seed: int = 12345, strength: float = 1.0):
+def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: int = 12345, strength: float = 1.0):
     global pipeline
     if pipeline is None:
         initialize_pipeline()
 
-    generator = torch.Generator().manual_seed(seed)
+    #generator = torch.Generator().manual_seed(seed)
+    generator = torch.Generator(device="cuda").manual_seed(0)
 
     output = pipeline(
+      prompt=prompt,
+      image=image,
+      mask_image=mask_image,
+      guidance_scale=8.0,
+      num_inference_steps=15,  # steps between 15 and 30 work well for us
+      strength=1.00,  # make sure to use `strength` below 1.0
+      generator=generator,
+    )
+
+    '''
+    output = pipeline(
         prompt,
-        image=input_image,
+        image=image,
         mask_image=mask_image,
         height=456,
         width=456,
         generator=generator,
         strength=strength
     )
-    return output.images[0]
+    '''
+    img = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
+    return rearrange(F.interpolate(img, size=(256, 456), mode='bilinear', align_corners=False), '1 c h w -> h w c').to(torch.uint8)
+
 
 # You might want to initialize the pipeline when the script is imported
 # But it can also be lazily initialized on the first call to run_inpainting_pipeline
