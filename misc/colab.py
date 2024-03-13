@@ -83,7 +83,7 @@ def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: 
       image=Image.fromarray(image.cpu().numpy().astype(np.uint8)), #, 'h w c -> c h w'),
       mask_image=Image.fromarray((mask_image * 255.0).cpu().numpy().astype(np.uint8), 'L'),
       guidance_scale=8.0,
-      num_inference_steps=30,  # steps between 15 and 30 work well for us
+      num_inference_steps=15,  # steps between 15 and 30 work well for us
       strength=strength,  # make sure to use `strength` below 1.0
       generator=generator,
     )

@@ -118,7 +118,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         if idx % 15 == 0:
             wombo_mask = wombo_img.sum(dim=2) < 10
             print(wombo_mask.sum())
-            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=1.0, prompt="")
+            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.99999999, prompt="")
             wombo_img[wombo_mask] = sq_init[wombo_mask]
 
         # --- visualization ---
@@ -151,7 +151,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         )
         rr.log("camera/image", rr.Image(np.array(pil_img)).compress(jpeg_quality=75))
         #rr.log("camera/image", rr.Image(np.array(sq_mask)[100:-100]).compress(jpeg_quality=75))
-        if idx > 300: breakpoint()
+    breakpoint()
 
 def main() -> None:
     parser = ArgumentParser(description="Visualize the output of COLMAP's sparse reconstruction on a video.")
