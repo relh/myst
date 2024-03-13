@@ -117,8 +117,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --- sideways pipeline ---
         if idx % 15 == 0:
             wombo_mask = wombo_img.sum(dim=2) < 10
-            print(wombo_mask.sum())
-            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.99999999, prompt="")
+            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.85, prompt="a partial kitchen view")
             wombo_img[wombo_mask] = sq_init[wombo_mask]
 
         # --- visualization ---
