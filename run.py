@@ -64,7 +64,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
     num_images = len(images.values())
     all_images = list(sorted(images.values(), key=lambda im: im.name))
     for idx, image in enumerate(all_images):
-        if idx % 10 == 0:
+        if idx % 15 == 0:
             print(f'{idx} / {num_images}')
 
         # only get one image, so only do one COLMAP calibration
@@ -115,12 +115,11 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # ---> 
 
         # --- sideways pipeline ---
-        if idx % 10 == 0:
-            sq_img, sq_mask, pad_h, pad_w = create_outpainting_image_and_mask(wombo_img, zoom=1.00)
-            sq_init = run_inpainting_pipeline(sq_img, sq_mask, strength=1.00, prompt="A kitchen.")
-            #diffused_img = sq_init[pad_h:(None if pad_h == 0 else -pad_h),\
-            #                       pad_w:(None if pad_w == 0 else -pad_w)]
-            wombo_img[wombo_img == 0] = sq_init[wombo_img == 0]
+        if idx % 15 == 0:
+            wombo_mask = wombo_img.sum(dim=2) < 10
+            print(wombo_mask.sum())
+            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=1.0, prompt="")
+            wombo_img[wombo_mask] = sq_init[wombo_mask]
 
         # --- visualization ---
         if visualization:
@@ -152,14 +151,14 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         )
         rr.log("camera/image", rr.Image(np.array(pil_img)).compress(jpeg_quality=75))
         #rr.log("camera/image", rr.Image(np.array(sq_mask)[100:-100]).compress(jpeg_quality=75))
-        if idx > 100: breakpoint()
+        if idx > 300: breakpoint()
 
 def main() -> None:
     parser = ArgumentParser(description="Visualize the output of COLMAP's sparse reconstruction on a video.")
     rr.script_add_args(parser)
     args = parser.parse_args()
 
-    rr.script_setup(args, "3myst")
+    rr.script_setup(args, "4myst")
     dataset_path = Path('/mnt/sda/epic-fields/p01_04/')
     read_and_log_sparse_reconstruction(dataset_path, filter_output=True, resize=False)
     rr.script_teardown(args)

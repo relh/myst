@@ -278,7 +278,7 @@ def depth_to_points_3d(depth_map, K, E, image=None, mask=None):
     ones = torch.ones(1, cam_coords_flat.shape[1], device=cam_coords.device)
     cam_coords_homogeneous = torch.cat([cam_coords_flat, ones], dim=0)
     E_inv = torch.linalg.inv(E)
-    print(E_inv)
+    #print(E_inv)
     world_coords_homogeneous = (E_inv @ cam_coords_homogeneous).T
     world_coords = (world_coords_homogeneous[:, :3] / world_coords_homogeneous[:, 3].unsqueeze(1)).view(cam_coords.shape)
     return world_coords[mask], image[mask]

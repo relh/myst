@@ -16,7 +16,7 @@ from torchvision.transforms.functional import pad, to_pil_image
 # Global variable for the pipeline
 pipeline = None
 
-def create_outpainting_image_and_mask(image, zoom):
+def create_outpainting_image_and_mask(image, mask, zoom):
     # Convert the PIL image to a PyTorch tensor
     image_tensor = torch.tensor(rearrange(image / 255.0, 'h w c -> 1 c h w'), dtype=torch.float32)
     '''
@@ -31,6 +31,10 @@ def create_outpainting_image_and_mask(image, zoom):
 
     # Apply affine transformation to zoom out
     transformed_image_tensor = warp_affine(image_tensor, M[:, :2], dsize=(h, w), padding_mode="border")
+
+    #sq_img, sq_mask, pad_h, pad_w = create_outpainting_image_and_mask(wombo_img, wombo_mask, zoom=1.00)
+    #diffused_img = sq_init[pad_h:(None if pad_h == 0 else -pad_h),\
+    #                       pad_w:(None if pad_w == 0 else -pad_w)]
     '''
 
     # Determine new size to make the image square and calculate padding
@@ -40,18 +44,11 @@ def create_outpainting_image_and_mask(image, zoom):
 
     # Apply padding to maintain border effect
     padded_image_tensor = pad(image_tensor, [pad_w, pad_h, pad_w, pad_h], padding_mode="edge")
-
-    # Create mask for the padded area
-    mask = torch.zeros(padded_image_tensor.shape[2], padded_image_tensor.shape[3])
-    mask[:pad_h, :] = 1
-    mask[(None if pad_h == 0 else -pad_h):, :] = 1
-    mask[:, :pad_w] = 1
-    mask[:, (None if pad_w == 0 else -pad_w):] = 1
-    mask[padded_image_tensor.squeeze().sum(dim=0) < 0.03] = 1
+    padded_mask = pad(mask, [pad_w, pad_h, pad_w, pad_h], mode="constant", value=1)
 
     padded_image_array = rearrange(padded_image_tensor, '1 c h w -> h w c').cpu().numpy()
     padded_image_array = (padded_image_array * 255).astype(np.uint8)
-    mask_array = (mask.numpy() * 255).astype(np.uint8)
+    mask_array = (padded_mask.cpu().numpy() * 255).astype(np.uint8)
 
     output_image = Image.fromarray(padded_image_array)
     output_mask = Image.fromarray(mask_array, 'L')  # 'L' mode for grayscale mask
@@ -83,11 +80,11 @@ def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: 
 
     output = pipeline(
       prompt=prompt,
-      image=image,
-      mask_image=mask_image,
+      image=Image.fromarray(image.cpu().numpy().astype(np.uint8)), #, 'h w c -> c h w'),
+      mask_image=Image.fromarray((mask_image * 255.0).cpu().numpy().astype(np.uint8), 'L'),
       guidance_scale=8.0,
-      num_inference_steps=15,  # steps between 15 and 30 work well for us
-      strength=1.00,  # make sure to use `strength` below 1.0
+      num_inference_steps=30,  # steps between 15 and 30 work well for us
+      strength=strength,  # make sure to use `strength` below 1.0
       generator=generator,
     )
 
