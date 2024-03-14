@@ -31,11 +31,6 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 #torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
-import torch
-import torch.nn.functional as F
-
-# Assuming tensor is your input tensor of shape [456, 256, 3]
-
 def mod_fill(tensor):
     tensor = tensor.to(torch.float16)
 

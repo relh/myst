@@ -24,7 +24,7 @@ from torchvision.transforms import ToPILImage, ToTensor
 from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model
-from misc.colab import run_inpainting_pipeline, create_outpainting_image_and_mask
+from misc.colab import run_inpainting_pipeline
 from misc.control import generate_outpainted_image
 from misc.outpainting import run
 from misc.replicate_me import run_replicate_with_pil
@@ -117,7 +117,7 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         # --- sideways pipeline ---
         if idx % 15 == 0:
             wombo_mask = wombo_img.sum(dim=2) < 10
-            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.85, prompt="a partial kitchen view")
+            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=1.000, prompt="a partial kitchen view")
             wombo_img[wombo_mask] = sq_init[wombo_mask]
 
         # --- visualization ---
