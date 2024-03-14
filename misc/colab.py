@@ -7,7 +7,8 @@ import numpy as np
 import PIL
 import torch
 import torch.nn.functional as F
-from diffusers import (AutoPipelineForInpainting,
+from diffusers import (AutoPipelineForInpainting, DPMSolverMultistepScheduler,
+                       StableDiffusionPipeline,
                        StableDiffusionXLInpaintPipeline)
 from einops import rearrange, repeat
 from kornia.geometry.transform import (get_affine_matrix2d,
@@ -16,7 +17,8 @@ from PIL import Image
 from torchvision.transforms import ToPILImage, ToTensor
 from torchvision.transforms.functional import pad, to_pil_image
 
-#torch.set_default_dtype(torch.float32)
+torch.set_default_dtype(torch.float32)
+torch.set_default_device('cuda')
 
 # Global variable for the pipeline
 pipeline = None
@@ -60,29 +62,35 @@ def tensor_to_square_pil(image, mask, zoom=(456.0 / 512.0)):
 
 def initialize_pipeline():
     global pipeline
-    '''
-    pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(
-                    "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
-                    torch_dtype=torch.float16, variant='fp16')
-    '''
+    #pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(
+    #                "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
+    #                torch_dtype=torch.float16, variant='fp16')
 
-    pipeline = AutoPipelineForInpainting.from_pretrained(\
-                 "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",\
-                 torch_dtype=torch.float16, variant="fp16").to("cuda")
+    #pipeline = AutoPipelineForInpainting.from_pretrained(\
+    #             "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",\
+    #             torch_dtype=torch.float16, variant="fp16").to("cuda")
 
-    pipeline.enable_model_cpu_offload()
+    #pipeline = AutoPipelineForInpainting.from_pretrained(\
+    #             "stabilityai/stable-diffusion-2-1",\
+    #             torch_dtype=torch.float16, variant="fp16").to("cuda")
+
+    pipeline = StableDiffusionPipeline.from_pretrained(\
+        "stabilityai/stable-diffusion-2-1",\
+        torch_dtype=torch.float32)
+
+    #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
+    pipeline = pipeline.to("cuda")
 
 # Function to run inpainting pipeline
 def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: int = 12345, strength: float = 1.0):
     global pipeline
     if pipeline is None:
         initialize_pipeline()
-        torch.set_default_device('cuda')
 
     generator = torch.Generator(device="cuda").manual_seed(seed)
-
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image)
 
+    #'''
     output = pipeline(
       prompt=prompt,
       image=image,
@@ -92,6 +100,18 @@ def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: 
       strength=strength,  # make sure to use `strength` below 1.0
       generator=generator,
     )
+    #'''
+    '''
+    output = pipeline(
+        prompt=prompt,
+        image=image,
+        mask_image=mask_image,
+        height=512,
+        width=512,
+        generator=generator,
+        strength=strength
+    )
+    '''
 
     output_image = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
     output_image = F.interpolate(output_image, size=(512, 512), mode='bilinear', align_corners=False)

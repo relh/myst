@@ -60,7 +60,7 @@ def mod_fill(tensor):
 
     # Apply the averages to zero values
     tensor[zero_mask] = average_values[zero_mask]
-    return tensor.to(torch.uint8)
+    return tensor#.to(torch.uint8)
 
 
 def make_square_mask(side='left'):
