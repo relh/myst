@@ -88,7 +88,7 @@ def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: 
         initialize_pipeline()
 
     generator = torch.Generator(device="cuda").manual_seed(seed)
-    image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image)
+    image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
 
     #'''
     output = pipeline(
@@ -117,10 +117,11 @@ def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: 
     output_image = F.interpolate(output_image, size=(512, 512), mode='bilinear', align_corners=False)
     output_image = output_image[:, :, pad_h:(None if pad_h == 0 else -pad_h), pad_w:(None if pad_w == 0 else -pad_w)]
 
-    to_unpad_h = int((512 - 456) / 2)
-    to_unpad_w = int((288 - 256) / 2)
-    unzoomed_image = output_image[:, :, to_unpad_w:-to_unpad_w, to_unpad_h:-to_unpad_h]
-    return rearrange(unzoomed_image, '1 c h w -> h w c').to(torch.uint8)
+    if pad_h > 0 and pad_w > 0:
+        to_unpad_h = int((512 - 456) / 2)
+        to_unpad_w = int((288 - 256) / 2)
+        output_image = output_image[:, :, to_unpad_w:-to_unpad_w, to_unpad_h:-to_unpad_h]
+    return rearrange(output_image, '1 c h w -> h w c').to(torch.uint8)
 
 
 # You might want to initialize the pipeline when the script is imported

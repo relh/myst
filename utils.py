@@ -27,12 +27,12 @@ from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 
-#torch.set_default_dtype(torch.float32)
-#torch.set_default_device('cuda')
+torch.set_default_dtype(torch.float32)
+torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
 def mod_fill(tensor):
-    tensor = tensor.to(torch.float16)
+    tensor = tensor.to(torch.float32)
 
     # Mask of zeros in all channels
     zero_mask = (tensor == 0).all(dim=-1)
@@ -59,7 +59,7 @@ def mod_fill(tensor):
     average_values = average_values.squeeze(0).permute(1, 2, 0)  # Back to original shape [256, 456, 3]
 
     # Apply the averages to zero values
-    tensor[zero_mask] = average_values[zero_mask]
+    tensor[zero_mask] = average_values.to(torch.float32)[zero_mask]
     return tensor#.to(torch.uint8)
 
 
@@ -122,7 +122,7 @@ def fill_missing_values_batched(image, mask):
     valid_mask_batch = repeat(mask, 'h w -> 1 c h w', c=3).float().cuda().half()
 
     # Define a 3x3 kernel for convolution
-    kernel = torch.ones((3, 1, 3, 3), dtype=torch.float16).cuda()
+    kernel = torch.ones((3, 1, 3, 3), dtype=torch.float32).cuda()
 
     # Convolve image and valid_mask with the kernel
     sum_neighbors = F.conv2d(image_batch * valid_mask_batch, kernel, padding=1, groups=3)
@@ -244,7 +244,7 @@ def points_3d_to_image(points_3d, colors, intrinsics, extrinsics, image_shape, t
     proj_pts = proj_pts[:, visible]
     im_proj_pts = im_proj_pts[:, visible]
 
-    if this_mask == None: this_mask = torch.zeros((256, 456), device=points_3d.device)
+    if this_mask == None: this_mask = torch.zeros((512, 512), device=points_3d.device)
     unocc = this_mask[y_pixels, x_pixels] == 0
     occ = this_mask[y_pixels, x_pixels] == 1
 
@@ -271,10 +271,10 @@ def depth_to_points_3d(depth_map, K, E, image=None, mask=None):
     cam_coords = kornia.geometry.depth_to_3d_v2(depth_map, K)#, normalize_points=True)
     cam_coords_flat = rearrange(cam_coords, 'h w xyz -> xyz (h w)')
     ones = torch.ones(1, cam_coords_flat.shape[1], device=cam_coords.device)
-    cam_coords_homogeneous = torch.cat([cam_coords_flat, ones], dim=0)
-    E_inv = torch.linalg.inv(E)
+    cam_coords_homogeneous = torch.cat([cam_coords_flat, ones], dim=0).to(torch.float32)
+    #E_inv = torch.linalg.inv(E.to(torch.float32))
     #print(E_inv)
-    world_coords_homogeneous = (E_inv @ cam_coords_homogeneous).T
+    world_coords_homogeneous = (E.to(torch.float32) @ cam_coords_homogeneous).T
     world_coords = (world_coords_homogeneous[:, :3] / world_coords_homogeneous[:, 3].unsqueeze(1)).view(cam_coords.shape)
     return world_coords[mask], image[mask]
 
