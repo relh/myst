@@ -79,12 +79,12 @@ def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, 
         fx, fy, cx, cy, k1, k2, p1, p2 = camera.params
         intrinsics = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]]).float().cuda()
         extrinsics = get_camera_extrinsic_matrix(image).cuda()
-        breakpoint()
 
         # --- project 3D points ---
         dense_points3d = torch.tensor(dense_points3d).float().cuda()
         proj_colmap, proj_dyn, colmap_depth, vis_colmap_3d, vis_dyn_3d, vis_colmap_colors, vis_dyn_colors = points_3d_to_image(dense_points3d, None, intrinsics, extrinsics, (camera.height, camera.width), this_mask=None)
         da_depth = F.interpolate(depth_pipe(pil_img)["predicted_depth"][None].cuda(), (camera.height, camera.width), mode="bilinear", align_corners=False)[0, 0]
+        breakpoint()
 
         ransac_da_depth, _ = ransac_alignment(da_depth.unsqueeze(0), colmap_depth.unsqueeze(0))
         local_da_depth = adjust_disparity(da_depth.squeeze(), colmap_depth.squeeze())

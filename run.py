@@ -106,8 +106,11 @@ def main():
 
         # --- establish orientation ---
         if extrinsics == None:
-            extrinsics = torch.eye(4).cuda()
-        quat_xyzw = matrix_to_quaternion(extrinsics[:3, :3].unsqueeze(0))
+            extrinsics = torch.tensor([[1, 0, 0, 0],
+                                       [0, 0, -1, 0],
+                                       [0, 1, 0, 0],
+                                       [0, 0, 0, 1]]).float().cuda()
+        quat_xyzw = matrix_to_quaternion(extrinsics[:3, :3].unsqueeze(0)).squeeze()
         print(quat_xyzw.shape)
 
         # --- estimate depth ---
@@ -132,9 +135,8 @@ def main():
             stable_diffusion_prompt = user_input
             print(f"Stored prompt for Stable Diffusion: '{stable_diffusion_prompt}'")
 
+        # --- turn 3d points to image ---
         proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = points_3d_to_image(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
-
-        # Convert proj_da to integer and clamp to image size
         image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
         proj_da = proj_da.long()
         proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
@@ -166,11 +168,11 @@ def main():
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
-        rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=[99, 99, 99]))
+        rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()))
+        rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log("camera", rr.Transform3D(\
                             translation=extrinsics[:3, 3].cpu().numpy(),\
-                            rotation=rr.Quaternion(xyzw=quat_xyzw.squeeze().cpu().numpy()), from_parent=True))
-        rr.log("camera", rr.ViewCoordinates.RDF, timeless=True)  # X=Right, Y=Down, Z=Forward
+                            rotation=rr.Quaternion(xyzw=quat_xyzw.cpu().numpy()), from_parent=True))
         rr.log(
             "camera/image",
             rr.Pinhole(

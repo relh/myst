@@ -267,15 +267,18 @@ def load_dense_point_cloud(ply_file_path: str):
 def depth_to_points_3d(depth_map, K, E, image=None, mask=None):
     if mask is None:
         mask = depth_map > 0.0
+    breakpoint()
     mask = mask.bool()
     cam_coords = kornia.geometry.depth_to_3d_v2(depth_map, K)#, normalize_points=True)
     cam_coords_flat = rearrange(cam_coords, 'h w xyz -> xyz (h w)')
     ones = torch.ones(1, cam_coords_flat.shape[1], device=cam_coords.device)
     cam_coords_homogeneous = torch.cat([cam_coords_flat, ones], dim=0).to(torch.float32)
-    #E_inv = torch.linalg.inv(E.to(torch.float32))
-    #print(E_inv)
-    world_coords_homogeneous = (E.to(torch.float32) @ cam_coords_homogeneous).T
+    E_inv = torch.linalg.inv(E.to(torch.float32))
+    print(E_inv)
+    world_coords_homogeneous = (E @ cam_coords_homogeneous).T
     world_coords = (world_coords_homogeneous[:, :3] / world_coords_homogeneous[:, 3].unsqueeze(1)).view(cam_coords.shape)
+    #world_coords[:, :, 1] *= -1.0
+    #world_coords[:, :, 2] *= -1.0
     return world_coords[mask], image[mask]
 
 if __name__ == "__main__":
