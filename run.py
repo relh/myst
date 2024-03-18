@@ -113,12 +113,8 @@ def main():
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
 
-        #da_depth = F.interpolate(depth_pipe(pil_img)["predicted_depth"][None].cuda(), (512, 512), mode="bilinear", align_corners=False)[0, 0]
-        #da_3d, da_colors = depth_to_points_3d(da_depth, intrinsics, extrinsics, image)
 
         da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
-        #da_colors = (torch.tensor(np.asarray(da_3d.colors)) * 255.0).float().to('cuda').to(torch.uint8)
-        #da_3d = torch.tensor(np.asarray(da_3d.points)).float().to('cuda')
 
         #user_input = input("Enter command (WASD), text for prompt, or 'quit' to exit: ")
         user_input = 'd'
@@ -171,10 +167,10 @@ def main():
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
         rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()))
+        rr.log("camera", rr.ViewCoordinates.RDF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log("camera", rr.Transform3D(\
                             translation=extrinsics[:3, 3].cpu().numpy(),\
                             rotation=rr.Quaternion(xyzw=quat_xyzw.cpu().numpy()), from_parent=True))
-        rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log(
             "camera/image",
             rr.Pinhole(

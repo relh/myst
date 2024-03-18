@@ -70,8 +70,6 @@ def img_to_pts_3d(color_image, extrinsics):
     x = (x - FINAL_WIDTH / 2) / focal_length_x
     y = (y - FINAL_HEIGHT / 2) / focal_length_y
     z = np.array(resized_pred)
-    #points = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3) * 50.0
-    #colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
 
     # Compute 3D points in camera coordinates
     points_camera_coord = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3) * 50.0
@@ -85,14 +83,6 @@ def img_to_pts_3d(color_image, extrinsics):
     da_colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
 
     return points_world_coord, da_colors
-
-    #pcd = o3d.geometry.PointCloud()
-    #pcd.points = o3d.utility.Vector3dVector(points)
-    #pcd.colors = o3d.utility.Vector3dVector(colors)
-    #da_colors = (torch.tensor(np.asarray(colors)) * 255.0).float().to('cuda').to(torch.uint8)
-    #da_3d = torch.tensor(np.asarray(points)).float().to('cuda')
-    #return da_3d, da_colors 
-    #o3d.io.write_point_cloud(os.path.join(OUTPUT_DIR, os.path.splitext(os.path.basename(image_path))[0] + ".ply"), pcd)
 
 def pts_3d_to_img(points_3d, colors, intrinsics, extrinsics, image_shape, this_mask=None):
     points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
