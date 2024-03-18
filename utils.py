@@ -267,7 +267,6 @@ def load_dense_point_cloud(ply_file_path: str):
 def depth_to_points_3d(depth_map, K, E, image=None, mask=None):
     if mask is None:
         mask = depth_map > 0.0
-    breakpoint()
     mask = mask.bool()
     cam_coords = kornia.geometry.depth_to_3d_v2(depth_map, K)#, normalize_points=True)
     cam_coords_flat = rearrange(cam_coords, 'h w xyz -> xyz (h w)')

@@ -22,14 +22,16 @@ from diffusers import AutoPipelineForInpainting, StableDiffusionInpaintPipeline
 from PIL import Image
 from pytorch3d.transforms import matrix_to_quaternion
 from torchvision.transforms import ToPILImage, ToTensor
-from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model
+from metric_depth import image_to_3d
 from misc.colab import run_inpainting_pipeline
 from misc.control import generate_outpainted_image
 from misc.outpainting import run
 from misc.replicate_me import run_replicate_with_pil
 from utils import *
+
+#from transformers import pipeline
 
 
 def move_camera(extrinsics, direction, amount):
@@ -78,18 +80,12 @@ def main():
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
     rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
-    # --- pipeline setup ---
-    depth_pipe = pipeline(task="depth-estimation", \
-                    torch_dtype=torch.float32, \
-                    model="LiheYoung/depth-anything-large-hf", 
-                    device=torch.device("cuda"))
-
     # Iterate through images (video frames) logging data related to each frame.
     image = None
     extrinsics = None
     visualization = False
-    intrinsics = torch.tensor([[256.0, 0.0000, 256.0000],
-                               [0.0000, 256.0, 256.0000],
+    intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
+                               [0.0000, 256.0*1.0, 256.0000],
                                [0.0000, 0.000, 1.0000]]).cuda()
     idx = 0
     while True:
@@ -106,17 +102,22 @@ def main():
 
         # --- establish orientation ---
         if extrinsics == None:
-            extrinsics = torch.tensor([[1, 0, 0, 0],
-                                       [0, 0, -1, 0],
-                                       [0, 1, 0, 0],
+            extrinsics = torch.tensor([[-1, 0, 0, 0],
+                                       [0, -1, 0, 0],
+                                       [0, 0, 1, 0],
                                        [0, 0, 0, 1]]).float().cuda()
         quat_xyzw = matrix_to_quaternion(extrinsics[:3, :3].unsqueeze(0)).squeeze()
         print(quat_xyzw.shape)
 
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
-        da_depth = F.interpolate(depth_pipe(pil_img)["predicted_depth"][None].cuda(), (512, 512), mode="bilinear", align_corners=False)[0, 0]
-        da_3d, da_colors = depth_to_points_3d(da_depth, intrinsics, extrinsics, image)
+
+        #da_depth = F.interpolate(depth_pipe(pil_img)["predicted_depth"][None].cuda(), (512, 512), mode="bilinear", align_corners=False)[0, 0]
+        #da_3d, da_colors = depth_to_points_3d(da_depth, intrinsics, extrinsics, image)
+
+        da_3d = image_to_3d(pil_img)
+        da_colors = (torch.tensor(np.asarray(da_3d.colors)) * 255.0).float().to('cuda').to(torch.uint8)
+        da_3d = torch.tensor(np.asarray(da_3d.points)).float().to('cuda')
 
         #user_input = input("Enter command (WASD), text for prompt, or 'quit' to exit: ")
         user_input = 'd'
