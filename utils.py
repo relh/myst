@@ -226,39 +226,6 @@ def get_camera_extrinsic_matrix(image):
     T[:3, 3] = torch.tensor(image.tvec)
     return T
 
-def points_3d_to_image(points_3d, colors, intrinsics, extrinsics, image_shape, this_mask=None):
-    points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
-    camera_coords = extrinsics @ points_homogeneous
-    proj_pts = intrinsics @ camera_coords[:3, :]
-    im_proj_pts = proj_pts[:2] / proj_pts[2]
-
-    # build depth map
-    x_pixels = torch.round(im_proj_pts[0, :]).long()
-    y_pixels = torch.round(im_proj_pts[1, :]).long()
-    visible = (camera_coords[2] > 0) & (im_proj_pts[0] >= 0) & (im_proj_pts[1] >= 0) & \
-          (x_pixels < image_shape[1]) & (y_pixels < image_shape[0]) 
-
-    # screen out invisible and index for hand-obj occlusion
-    x_pixels = x_pixels[visible]
-    y_pixels = y_pixels[visible]
-    proj_pts = proj_pts[:, visible]
-    im_proj_pts = im_proj_pts[:, visible]
-
-    if this_mask == None: this_mask = torch.zeros((512, 512), device=points_3d.device)
-    unocc = this_mask[y_pixels, x_pixels] == 0
-    occ = this_mask[y_pixels, x_pixels] == 1
-
-    depth_map = torch.full(image_shape, float('inf'), device=points_3d.device)
-    depth_map[y_pixels[unocc], x_pixels[unocc]] = torch.min(depth_map[y_pixels[unocc], x_pixels[unocc]], proj_pts[2][unocc])
-    depth_map[depth_map == float('inf')] = 0
-
-    return im_proj_pts.T[unocc][:, :2], \
-           im_proj_pts.T[occ][:, :2], \
-           depth_map, \
-           points_3d[visible][unocc], \
-           points_3d[visible][occ], \
-           (None if colors is None else colors[visible][unocc]), \
-           (None if colors is None else colors[visible][occ])
 
 def load_dense_point_cloud(ply_file_path: str):
     point_cloud = o3d.io.read_point_cloud(ply_file_path)

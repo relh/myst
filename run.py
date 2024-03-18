@@ -24,7 +24,7 @@ from pytorch3d.transforms import matrix_to_quaternion
 from torchvision.transforms import ToPILImage, ToTensor
 
 from ek_fields_utils.colmap_rw_utils import read_model
-from metric_depth import image_to_3d
+from metric_depth import img_to_pts_3d, pts_3d_to_img
 from misc.colab import run_inpainting_pipeline
 from misc.control import generate_outpainted_image
 from misc.outpainting import run
@@ -99,6 +99,7 @@ def main():
             image = run_inpainting_pipeline(torch.zeros(512, 512, 3), torch.ones(512, 512), strength=0.89, prompt=user_input)
         else:
             breakpoint()
+            image = wombo_img.to(torch.uint8)
 
         # --- establish orientation ---
         if extrinsics == None:
@@ -115,9 +116,9 @@ def main():
         #da_depth = F.interpolate(depth_pipe(pil_img)["predicted_depth"][None].cuda(), (512, 512), mode="bilinear", align_corners=False)[0, 0]
         #da_3d, da_colors = depth_to_points_3d(da_depth, intrinsics, extrinsics, image)
 
-        da_3d = image_to_3d(pil_img)
-        da_colors = (torch.tensor(np.asarray(da_3d.colors)) * 255.0).float().to('cuda').to(torch.uint8)
-        da_3d = torch.tensor(np.asarray(da_3d.points)).float().to('cuda')
+        da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
+        #da_colors = (torch.tensor(np.asarray(da_3d.colors)) * 255.0).float().to('cuda').to(torch.uint8)
+        #da_3d = torch.tensor(np.asarray(da_3d.points)).float().to('cuda')
 
         #user_input = input("Enter command (WASD), text for prompt, or 'quit' to exit: ")
         user_input = 'd'
@@ -137,7 +138,7 @@ def main():
             print(f"Stored prompt for Stable Diffusion: '{stable_diffusion_prompt}'")
 
         # --- turn 3d points to image ---
-        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = points_3d_to_image(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
+        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = pts_3d_to_img(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
         image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
         proj_da = proj_da.long()
         proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
@@ -170,19 +171,20 @@ def main():
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
         rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()))
-        rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log("camera", rr.Transform3D(\
                             translation=extrinsics[:3, 3].cpu().numpy(),\
                             rotation=rr.Quaternion(xyzw=quat_xyzw.cpu().numpy()), from_parent=True))
+        rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log(
             "camera/image",
             rr.Pinhole(
-                resolution=[512, 512],
-                focal_length=[256, 256],
-                principal_point=[256, 256],
+                resolution=[512., 512.],
+                focal_length=[256., 256.],
+                principal_point=[256., 256.],
             ),
         )
         rr.log("camera/image", rr.Image(np.array(pil_img)).compress(jpeg_quality=75))
+        breakpoint()
 
     rr.script_teardown(args)
     breakpoint()
