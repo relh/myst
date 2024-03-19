@@ -74,11 +74,11 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     args = parser.parse_args()
-    rr.script_setup(args, "4myst")
+    rr.script_setup(args, "5myst")
 
     # --- initial logging ---
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
-    rr.log("/", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
+    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_UP, timeless=True)
 
     # Iterate through images (video frames) logging data related to each frame.
     image = None
@@ -98,13 +98,12 @@ def main():
             user_input = "A photo of a kitchen"
             image = run_inpainting_pipeline(torch.zeros(512, 512, 3), torch.ones(512, 512), strength=0.89, prompt=user_input)
         else:
-            breakpoint()
             image = wombo_img.to(torch.uint8)
 
         # --- establish orientation ---
         if extrinsics == None:
-            extrinsics = torch.tensor([[-1, 0, 0, 0],
-                                       [0, -1, 0, 0],
+            extrinsics = torch.tensor([[1, 0, 0, 0],
+                                       [0, 1, 0, 0],
                                        [0, 0, 1, 0],
                                        [0, 0, 0, 1]]).float().cuda()
         quat_xyzw = matrix_to_quaternion(extrinsics[:3, :3].unsqueeze(0)).squeeze()
@@ -112,8 +111,6 @@ def main():
 
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
-
-
         da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
 
         #user_input = input("Enter command (WASD), text for prompt, or 'quit' to exit: ")
@@ -152,35 +149,23 @@ def main():
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[wombo_mask] = sq_init[wombo_mask]
 
-        # --- visualization ---
-        if visualization:
-            fig, ax = plt.subplots(2, 3, figsize=(10,7))
-            ax[0, 0].imshow(pil_img)
-            ax[1, 0].imshow(valid_mask_img.cpu().numpy())
-            ax[0, 1].imshow(sq_img)
-            ax[1, 1].imshow(sq_mask)
-            ax[0, 2].imshow(sq_init.cpu().numpy())
-            ax[1, 2].imshow(diffused_img.cpu().numpy())
-            plt.tight_layout()
-            plt.show()
-
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
-        rr.log("da_3d", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()))
-        rr.log("camera", rr.ViewCoordinates.RDF, timeless=True)  # X=Right, Y=Down, Z=Forward
-        rr.log("camera", rr.Transform3D(\
-                            translation=extrinsics[:3, 3].cpu().numpy(),\
-                            rotation=rr.Quaternion(xyzw=quat_xyzw.cpu().numpy()), from_parent=True))
-        rr.log(
-            "camera/image",
+        #rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
+        rr.log("world/camera", 
+            rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
+                           mat3x3=extrinsics[:3, :3].cpu().numpy()))
+        rr.log("world/camera/image",
             rr.Pinhole(
                 resolution=[512., 512.],
                 focal_length=[256., 256.],
                 principal_point=[256., 256.],
             ),
         )
-        rr.log("camera/image", rr.Image(np.array(pil_img)).compress(jpeg_quality=75))
-        breakpoint()
+        rr.log("world/camera/image", rr.Image(wombo_img.to(torch.uint8).cpu().numpy()).compress(jpeg_quality=75))
+        rr.log("world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()))
+
+        if idx == 10: breakpoint()
 
     rr.script_teardown(args)
     breakpoint()
