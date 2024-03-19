@@ -60,15 +60,19 @@ def move_camera(extrinsics, direction, amount):
     t = extrinsics[:3, 3]
     
     if direction in ['w', 's']:
-        # Direction vector for forward (assuming the camera looks towards the positive Z in its local space)
-        forward_vec = torch.tensor([0, 0, 1 if direction == 'w' else -1]).float()
+        # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
+        # Negative for 's' (backward)
+        forward_vec = torch.tensor([0, 0, -amount if direction == 'w' else amount], device=extrinsics.device).float()
+        
         # Transform the forward vector by the camera's rotation to get the world space direction
-        world_direction = torch.matmul(R, forward_vec)
-        # Update the translation component of the extrinsics matrix by the world space direction scaled by the amount
-        t += world_direction * amount
+        # Note: No need to change the direction based on 'w' or 's' outside of forward_vec calculation
+        world_direction = torch.matmul(R, forward_vec.unsqueeze(-1)).squeeze()
+
+        # Update the translation component of the extrinsics matrix by adding the world space direction
+        extrinsics[:3, 3] += world_direction
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
-        angle = torch.tensor(amount if direction == 'd' else -amount)
+        angle = torch.tensor(-amount if direction == 'd' else amount)
         # Rotation matrix around the Y-axis (assuming Y is up)
         rotation_matrix = torch.tensor([
             [torch.cos(angle), 0, torch.sin(angle), 0],
@@ -129,7 +133,7 @@ def main():
         #rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
-                           mat3x3=extrinsics[:3, :3].cpu().numpy()))
+                           mat3x3=torch.linalg.inv(extrinsics)[:3, :3].cpu().numpy()))
         rr.log("world/camera/image",
             rr.Pinhole(
                 resolution=[512., 512.],
@@ -138,15 +142,14 @@ def main():
             ),
         )
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
-        rr.log("world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()))
+        rr.log("world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
 
         inpaint = False
         print("Press any key...")
         user_input = get_keypress()
-        print(f"You pressed: {user_input}")
+        print(f"You pressed: {user_input}\n")
 
         if user_input.lower() in ['w', 'a', 's', 'd']:
-            # Move the camera based on the input
             extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
             print("Camera moved/rotated. New extrinsics matrix:\n", extrinsics)
         elif user_input.lower() == 'q':
