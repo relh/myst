@@ -9,6 +9,9 @@ torch.backends.cuda.preferred_linalg_library()
 
 import os
 import re
+import sys
+import termios
+import tty
 from argparse import ArgumentParser
 from pathlib import Path
 
@@ -33,6 +36,16 @@ from utils import *
 
 #from transformers import pipeline
 
+
+def get_keypress():
+    fd = sys.stdin.fileno()
+    original_attributes = termios.tcgetattr(fd)
+    try:
+        tty.setraw(sys.stdin.fileno())
+        key = sys.stdin.read(1)  # Read a single character
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, original_attributes)
+    return key
 
 def move_camera(extrinsics, direction, amount):
     """
@@ -74,11 +87,11 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     args = parser.parse_args()
-    rr.script_setup(args, "6myst")
+    rr.script_setup(args, "7myst")
 
     # --- initial logging ---
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
-    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
+    rr.log("world", rr.ViewCoordinates.LEFT_HAND_Y_DOWN, timeless=True)
 
     # Iterate through images (video frames) logging data related to each frame.
     image = None
@@ -111,42 +124,6 @@ def main():
         pil_img = Image.fromarray(image.cpu().numpy())
         da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
 
-        #user_input = input("Enter command (WASD), text for prompt, or 'quit' to exit: ")
-        user_input = 'd'
-        if user_input.lower() in ['w', 'a', 's', 'd']:
-            # Move the camera based on the input
-            #extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
-            print("Camera moved/rotated. New extrinsics matrix:\n", extrinsics)
-        elif user_input.lower() == 'quit':
-            print("Exiting...")
-            break
-        elif user_input.lower() == 'break':
-            print("Breakpoint...")
-            breakpoint()
-        else:
-            # Treat the input as a text prompt for Stable Diffusion
-            stable_diffusion_prompt = user_input
-            print(f"Stored prompt for Stable Diffusion: '{stable_diffusion_prompt}'")
-
-        # --- turn 3d points to image ---
-        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = pts_3d_to_img(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
-        image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
-        proj_da = proj_da.long()
-        proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
-        proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
-        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
-
-        # --- despeckle pipeline ---
-        wombo_img = mod_fill(image_t)
-
-        # --- sideways pipeline ---
-        if idx % 15 == 0:
-            wombo_mask = wombo_img.sum(dim=2) < 10
-            wombo_img[wombo_mask] = -1.0
-            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.89, prompt="a partial kitchen view")
-            wombo_img = wombo_img.to(torch.uint8)
-            wombo_img[wombo_mask] = sq_init[wombo_mask]
-
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
         #rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
@@ -160,13 +137,49 @@ def main():
                 principal_point=[256., 256.],
             ),
         )
-        rr.log("world/camera/image", rr.Image(wombo_img.to(torch.uint8).cpu().numpy()).compress(jpeg_quality=75))
+        rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
         rr.log("world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()))
 
-        if idx == 10: breakpoint()
+        inpaint = False
+        print("Press any key...")
+        user_input = get_keypress()
+        print(f"You pressed: {user_input}")
+
+        if user_input.lower() in ['w', 'a', 's', 'd']:
+            # Move the camera based on the input
+            extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
+            print("Camera moved/rotated. New extrinsics matrix:\n", extrinsics)
+        elif user_input.lower() == 'q':
+            print("Exiting...")
+            break
+        elif user_input.lower() == 'b':
+            print("Breakpoint...")
+            breakpoint()
+        else:
+            # Treat the input as a text prompt for Stable Diffusion
+            user_input = input("Enter scene description for stable diffusion: ")
+            inpaint = True
+
+        # --- turn 3d points to image ---
+        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = pts_3d_to_img(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
+        image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
+        proj_da = proj_da.long()
+        proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
+        proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
+        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
+
+        # --- despeckle pipeline ---
+        wombo_img = mod_fill(image_t)
+
+        # --- sideways pipeline ---
+        if inpaint: 
+            wombo_mask = wombo_img.sum(dim=2) < 10
+            wombo_img[wombo_mask] = -1.0
+            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.89, prompt=user_input)
+            wombo_img = wombo_img.to(torch.uint8)
+            wombo_img[wombo_mask] = sq_init[wombo_mask]
 
     rr.script_teardown(args)
-    breakpoint()
 
 if __name__ == "__main__":
     # load an input image
