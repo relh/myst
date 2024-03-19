@@ -130,7 +130,7 @@ def main():
         new_da_3d, new_da_colors = img_to_pts_3d(pil_img, extrinsics)
 
         new_da_3d, new_da_colors = trim_and_reshape_points_and_colors(
-            new_da_3d, new_da_colors, border=15)
+            new_da_3d, new_da_colors, border=20)
 
         if da_3d is None:
             da_3d, da_colors = new_da_3d, new_da_colors
@@ -154,22 +154,19 @@ def main():
         rr.log(f"world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
 
         inpaint = False
-        print("Press any key...")
+        print("Press (w, a, s, d) to move, (q)uit, (b)reakpoint, otherwise enter prompt text...")
         user_input = get_keypress()
-        print(f"You pressed: {user_input}\n")
-
         if user_input.lower() in ['w', 'a', 's', 'd']:
             extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
-            print("Camera moved/rotated. New extrinsics matrix:\n", extrinsics)
+            print(f"{user_input} --> camera moved/rotated, extrinsics:\n", extrinsics)
         elif user_input.lower() == 'q':
-            print("Exiting...")
+            print(f"{user_input} --> quiting...")
             break
         elif user_input.lower() == 'b':
-            print("Breakpoint...")
+            print(f"{user_input} --> breakpoint...")
             breakpoint()
         else:
-            # Treat the input as a text prompt for Stable Diffusion
-            user_input = input("Enter scene description for stable diffusion: ")
+            user_input = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
 
         # --- turn 3d points to image ---
@@ -187,7 +184,7 @@ def main():
         if inpaint: 
             wombo_mask = wombo_img.sum(dim=2) < 10
             wombo_img[wombo_mask] = -1.0
-            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.89, prompt=user_input)
+            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.66, prompt=user_input)
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[wombo_mask] = sq_init[wombo_mask]
 
