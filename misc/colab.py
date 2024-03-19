@@ -1,5 +1,6 @@
 # inpainting_pipeline.py
 import math
+import random
 
 import einops
 import matplotlib.pyplot as plt
@@ -87,6 +88,7 @@ def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: 
     if pipeline is None:
         initialize_pipeline()
 
+    seed = random.randint(0, 99999)
     generator = torch.Generator(device="cuda").manual_seed(seed)
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
 
@@ -96,7 +98,7 @@ def run_inpainting_pipeline(image: Image, mask_image: Image, prompt: str, seed: 
       image=image,
       mask_image=mask_image,
       guidance_scale=8.0,
-      num_inference_steps=15,  # steps between 15 and 30 work well for us
+      num_inference_steps=25,  # steps between 15 and 30 work well for us
       strength=strength,  # make sure to use `strength` below 1.0
       generator=generator,
     )

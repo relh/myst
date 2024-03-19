@@ -101,6 +101,7 @@ def main():
     # Iterate through images (video frames) logging data related to each frame.
     da_3d = None
     image = None
+    mask = None
     extrinsics = None
     visualization = False
     intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
@@ -114,9 +115,12 @@ def main():
         if image is None: 
             #user_input = input("Describe initial scene: ")
             user_input = "A photo of a kitchen"
-            image = run_inpainting_pipeline(torch.zeros(512, 512, 3), torch.ones(512, 512), strength=0.89, prompt=user_input)
+            image = run_inpainting_pipeline(torch.zeros(512, 512, 3), torch.ones(512, 512), strength=0.70, prompt=user_input)
+            mask = torch.ones(512, 512)
         else:
             image = wombo_img.to(torch.uint8)
+            if mask is None:
+                mask = image.sum(dim=2) < 10
 
         # --- establish orientation ---
         if extrinsics == None:
@@ -151,10 +155,11 @@ def main():
             ),
         )
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
+        rr.log("world/camera/mask", rr.Image(mask.cpu().numpy()).compress(jpeg_quality=75))
         rr.log(f"world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
 
         inpaint = False
-        print("Press (w, a, s, d) to move, (q)uit, (b)reakpoint, otherwise enter prompt text...")
+        print("Hit (w, a, s, d) move, (q)uit, (b)reakpoint, or (t)ext for stable diffusion...")
         user_input = get_keypress()
         if user_input.lower() in ['w', 'a', 's', 'd']:
             extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
@@ -182,11 +187,11 @@ def main():
 
         # --- sideways pipeline ---
         if inpaint: 
-            wombo_mask = wombo_img.sum(dim=2) < 10
-            wombo_img[wombo_mask] = -1.0
-            sq_init = run_inpainting_pipeline(wombo_img, wombo_mask.float(), strength=0.66, prompt=user_input)
+            mask = wombo_img.sum(dim=2) < 10
+            wombo_img[mask] = -1.0
+            sq_init = run_inpainting_pipeline(wombo_img, mask.float(), strength=0.05, prompt=user_input)
             wombo_img = wombo_img.to(torch.uint8)
-            wombo_img[wombo_mask] = sq_init[wombo_mask]
+            wombo_img[mask] = sq_init[mask]
 
     rr.script_teardown(args)
 
