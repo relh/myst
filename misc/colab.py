@@ -18,8 +18,8 @@ from PIL import Image
 from torchvision.transforms import ToPILImage, ToTensor
 from torchvision.transforms.functional import pad, to_pil_image
 
-torch.set_default_dtype(torch.float32)
-torch.set_default_device('cuda')
+#torch.set_default_dtype(torch.float32)
+#torch.set_default_device('cuda')
 
 # Global variable for the pipeline
 pipeline = None
@@ -35,7 +35,7 @@ def tensor_to_square_pil(image, mask, zoom=(456.0 / 512.0)):
     translate = torch.tensor([0.0, 0.0]).unsqueeze(0)
     angle = torch.tensor([0.0])
 
-    M = get_affine_matrix2d(center=center, angle=angle, scale=zoom_tensor, translations=translate)
+    M = get_affine_matrix2d(center=center, angle=angle, scale=zoom_tensor, translations=translate).to(image_tensor.device)
 
     # Apply affine transformation to zoom out
     image_tensor = warp_affine(image_tensor, M[:, :2], dsize=(math.ceil(h / zoom), math.ceil(w / zoom)), padding_mode="border")
@@ -79,7 +79,7 @@ def initialize_pipeline():
         "stabilityai/stable-diffusion-2-1",\
         torch_dtype=torch.float32)
 
-    #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
+    pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
     pipeline = pipeline.to("cuda")
 
 # Function to run inpainting pipeline

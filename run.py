@@ -80,7 +80,7 @@ def move_camera(extrinsics, direction, amount):
             [0, 1, 0, 0],
             [-torch.sin(angle), 0, torch.cos(angle), 0],
             [0, 0, 0, 1]
-        ])
+        ], device=extrinsics.device)
         # Apply rotation to the extrinsics matrix
         extrinsics = torch.matmul(rotation_matrix, extrinsics)
     
@@ -92,10 +92,10 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     args = parser.parse_args()
-    rr.script_setup(args, "7myst")
+    rr.script_setup(args, "9myst")
 
     # --- initial logging ---
-    rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
+    #rr.log("description", rr.TextDocument('',  media_type=rr.MediaType.MARKDOWN), timeless=True)
     rr.log("world", rr.ViewCoordinates.LEFT_HAND_Y_DOWN, timeless=True)
 
     # Iterate through images (video frames) logging data related to each frame.
@@ -114,13 +114,12 @@ def main():
         # --- setup initial scene ---
         if image is None: 
             #user_input = input("Describe initial scene: ")
-            user_input = "A photo of a kitchen"
+            user_input = "A photo of an open floorplan kitchen."
             image = run_inpainting_pipeline(torch.zeros(512, 512, 3), torch.ones(512, 512), strength=0.70, prompt=user_input)
             mask = torch.ones(512, 512)
         else:
             image = wombo_img.to(torch.uint8)
-            if mask is None:
-                mask = image.sum(dim=2) < 10
+            mask = image.sum(dim=2) < 10
 
         # --- establish orientation ---
         if extrinsics == None:
@@ -132,9 +131,7 @@ def main():
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
         new_da_3d, new_da_colors = img_to_pts_3d(pil_img, extrinsics)
-
-        new_da_3d, new_da_colors = trim_and_reshape_points_and_colors(
-            new_da_3d, new_da_colors, border=20)
+        new_da_3d, new_da_colors = trim_points(new_da_3d, new_da_colors, border=32)
 
         if da_3d is None:
             da_3d, da_colors = new_da_3d, new_da_colors
@@ -143,20 +140,15 @@ def main():
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
+        rr.log(f"world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
         #rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
                            mat3x3=torch.linalg.inv(extrinsics)[:3, :3].cpu().numpy()))
-        rr.log("world/camera/image",
-            rr.Pinhole(
-                resolution=[512., 512.],
-                focal_length=[256., 256.],
-                principal_point=[256., 256.],
-            ),
-        )
+        rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
+        rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
+        rr.log("world/camera/image",rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
-        rr.log("world/camera/mask", rr.Image(mask.cpu().numpy()).compress(jpeg_quality=75))
-        rr.log(f"world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
 
         inpaint = False
         print("Hit (w, a, s, d) move, (q)uit, (b)reakpoint, or (t)ext for stable diffusion...")

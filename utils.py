@@ -27,8 +27,8 @@ from transformers import pipeline
 
 from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 
-torch.set_default_dtype(torch.float32)
-torch.set_default_device('cuda')
+#torch.set_default_dtype(torch.float32)
+#torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
 def mod_fill(tensor):
