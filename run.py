@@ -74,11 +74,11 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     args = parser.parse_args()
-    rr.script_setup(args, "5myst")
+    rr.script_setup(args, "6myst")
 
     # --- initial logging ---
     rr.log("description", rr.TextDocument('tada',  media_type=rr.MediaType.MARKDOWN), timeless=True)
-    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_UP, timeless=True)
+    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     # Iterate through images (video frames) logging data related to each frame.
     image = None
@@ -106,8 +106,6 @@ def main():
                                        [0, 1, 0, 0],
                                        [0, 0, 1, 0],
                                        [0, 0, 0, 1]]).float().cuda()
-        quat_xyzw = matrix_to_quaternion(extrinsics[:3, :3].unsqueeze(0)).squeeze()
-        print(quat_xyzw.shape)
 
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
