@@ -27,6 +27,7 @@ from pytorch3d.transforms import matrix_to_quaternion
 from torchvision.transforms import ToPILImage, ToTensor
 
 from ek_fields_utils.colmap_rw_utils import read_model
+from merge import *
 from metric_depth import img_to_pts_3d, pts_3d_to_img
 from misc.colab import run_inpainting_pipeline
 from misc.control import generate_outpainted_image
@@ -98,6 +99,7 @@ def main():
     rr.log("world", rr.ViewCoordinates.LEFT_HAND_Y_DOWN, timeless=True)
 
     # Iterate through images (video frames) logging data related to each frame.
+    da_3d = None
     image = None
     extrinsics = None
     visualization = False
@@ -107,7 +109,6 @@ def main():
     idx = 0
     while True:
         idx += 1
-        if idx % 15 == 0: print(f'{idx}')
 
         # --- setup initial scene ---
         if image is None: 
@@ -126,7 +127,15 @@ def main():
 
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
-        da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
+        new_da_3d, new_da_colors = img_to_pts_3d(pil_img, extrinsics)
+
+        new_da_3d, new_da_colors = trim_and_reshape_points_and_colors(
+            new_da_3d, new_da_colors, border=15)
+
+        if da_3d is None:
+            da_3d, da_colors = new_da_3d, new_da_colors
+        else:
+            da_3d, da_colors = merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors)
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -142,7 +151,7 @@ def main():
             ),
         )
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
-        rr.log("world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
+        rr.log(f"world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
 
         inpaint = False
         print("Press any key...")

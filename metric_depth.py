@@ -67,8 +67,8 @@ def img_to_pts_3d(color_image, extrinsics):
 
     focal_length_x, focal_length_y = (FX, FY) if not NYU_DATA else (FL, FL)
     x, y = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
-    x = (x - FINAL_WIDTH / 2) / focal_length_x
-    y = (y - FINAL_HEIGHT / 2) / focal_length_y
+    x = (x - FINAL_WIDTH / 2.0) / focal_length_x
+    y = (y - FINAL_HEIGHT / 2.0) / focal_length_y
     z = np.array(resized_pred)
 
     # Compute 3D points in camera coordinates
