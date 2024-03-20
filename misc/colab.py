@@ -64,35 +64,12 @@ def tensor_to_square_pil(image, mask, zoom=(456.0 / 512.0)):
 
 def initialize_pipeline(model):
     global pipeline
-    #pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(
-    #                "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
-    #                torch_dtype=torch.float16, variant='fp16')
-
-    #pipeline = AutoPipelineForInpainting.from_pretrained(\
-    #             "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",\
-    #             torch_dtype=torch.float16, variant="fp16").to("cuda")
 
     pipeline = AutoPipelineForInpainting.from_pretrained(
         "runwayml/stable-diffusion-inpainting", torch_dtype=torch.float16, variant="fp16"
     ).to("cuda")
     pipeline.initial_strength = 1.0
     pipeline.next_strength = 1.0
-
-    '''
-    pipeline = AutoPipelineForInpainting.from_pretrained(\
-                 "stabilityai/stable-diffusion-2-1",\
-                 torch_dtype=torch.float16, variant="fp16").to("cuda")
-    pipeline.initial_strength = 1.0
-    pipeline.next_strength = 0.05
-    '''
-
-    '''
-    pipeline = StableDiffusionPipeline.from_pretrained(\
-        "stabilityai/stable-diffusion-2-1",\
-        torch_dtype=torch.float32)
-    pipeline.initial_strength = 1.0
-    pipeline.next_strength = 0.89
-    '''
 
     #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
     #pipeline.enable_xformers_memory_efficient_attention()
@@ -112,7 +89,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str, seed: int = 12345,
     generator = torch.Generator(device="cuda").manual_seed(seed)
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
 
-    '''
+    #'''
     output = pipeline(
       prompt=prompt,
       image=image,
@@ -122,8 +99,8 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str, seed: int = 12345,
       strength=strength,  # make sure to use `strength` below 1.0
       generator=generator,
     )
-    '''
     #'''
+    '''
     output = pipeline(
         prompt=prompt,
         image=image,
@@ -133,7 +110,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str, seed: int = 12345,
         generator=generator,
         strength=strength
     )
-    #'''
+    '''
 
     output_image = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
     output_image = F.interpolate(output_image, size=(512, 512), mode='bilinear', align_corners=False)

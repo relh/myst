@@ -35,8 +35,6 @@ from misc.outpainting import run
 from misc.replicate_me import run_replicate_with_pil
 from utils import *
 
-#from transformers import pipeline
-
 
 def get_keypress():
     fd = sys.stdin.fileno()
@@ -48,6 +46,7 @@ def get_keypress():
         termios.tcsetattr(fd, termios.TCSADRAIN, original_attributes)
     return key
 
+
 def move_camera(extrinsics, direction, amount):
     """
     Move the camera considering its orientation or rotate left/right.
@@ -58,19 +57,11 @@ def move_camera(extrinsics, direction, amount):
     """
     # Extract rotation matrix R and translation vector t from the extrinsics matrix
     R = extrinsics[:3, :3]
-    t = extrinsics[:3, 3]
     
     if direction in ['w', 's']:
         # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
-        # Negative for 's' (backward)
-        forward_vec = torch.tensor([0, 0, -amount if direction == 'w' else amount], device=extrinsics.device).float()
-        
-        # Transform the forward vector by the camera's rotation to get the world space direction
-        # Note: No need to change the direction based on 'w' or 's' outside of forward_vec calculation
-        world_direction = torch.matmul(R, forward_vec.unsqueeze(-1)).squeeze()
-
-        # Update the translation component of the extrinsics matrix by adding the world space direction
-        extrinsics[:3, 3] += world_direction
+        amount = -amount if direction == 'w' else amount
+        extrinsics[:3, 3] += torch.tensor([0, 0, 10.0*amount], device=extrinsics.device).float()
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
         angle = torch.tensor(-amount if direction == 'd' else amount)
@@ -96,7 +87,7 @@ def main():
 
     # --- initial logging ---
     #rr.log("description", rr.TextDocument('',  media_type=rr.MediaType.MARKDOWN), timeless=True)
-    rr.log("world", rr.ViewCoordinates.LEFT_HAND_Y_DOWN, timeless=True)
+    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     # Iterate through images (video frames) logging data related to each frame.
     da_3d = None
@@ -141,10 +132,9 @@ def main():
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
         rr.log(f"world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
-        #rr.log("camera", rr.ViewCoordinates.LUF, timeless=True)  # X=Right, Y=Down, Z=Forward
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
-                           mat3x3=torch.linalg.inv(extrinsics)[:3, :3].cpu().numpy()))
+                           mat3x3=extrinsics[:3, :3].cpu().numpy(), from_parent=True))
         rr.log("world/camera/image",rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
         rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
@@ -175,7 +165,7 @@ def main():
         image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
 
         # --- despeckle pipeline ---
-        wombo_img = mod_fill(image_t)
+        wombo_img = image_t #mod_fill(image_t)
 
         # --- sideways pipeline ---
         if inpaint: 
