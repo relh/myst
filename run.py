@@ -156,9 +156,7 @@ def main():
             print(f"{user_input} --> camera moved/rotated, extrinsics:\n", extrinsics)
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
-            #wombo_img = fill(image_t)      # blur points to make a smooth image
-            user_input = ''
-            inpaint = True 
+            wombo_img = fill(image_t)      # blur points to make a smooth image
         elif user_input.lower() == 'k':
             print(f"{user_input} --> kill...")
             break
