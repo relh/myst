@@ -29,7 +29,7 @@ from torchvision.transforms import ToPILImage, ToTensor
 from ek_fields_utils.colmap_rw_utils import read_model
 from merge import *
 from metric_depth import img_to_pts_3d, pts_3d_to_img
-from misc.colab import run_inpainting_pipeline
+from misc.colab import run_inpaint
 from misc.control import generate_outpainted_image
 from misc.outpainting import run
 from misc.replicate_me import run_replicate_with_pil
@@ -92,7 +92,7 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     args = parser.parse_args()
-    rr.script_setup(args, "9myst")
+    rr.script_setup(args, "10myst")
 
     # --- initial logging ---
     #rr.log("description", rr.TextDocument('',  media_type=rr.MediaType.MARKDOWN), timeless=True)
@@ -115,7 +115,7 @@ def main():
         if image is None: 
             #user_input = input("Describe initial scene: ")
             user_input = "A photo of an open floorplan kitchen."
-            image = run_inpainting_pipeline(torch.zeros(512, 512, 3), torch.ones(512, 512), strength=0.70, prompt=user_input)
+            image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=user_input)
             mask = torch.ones(512, 512)
         else:
             image = wombo_img.to(torch.uint8)
@@ -145,10 +145,10 @@ def main():
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
                            mat3x3=torch.linalg.inv(extrinsics)[:3, :3].cpu().numpy()))
-        rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
-        rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
         rr.log("world/camera/image",rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
+        rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
+        rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
         inpaint = False
         print("Hit (w, a, s, d) move, (q)uit, (b)reakpoint, or (t)ext for stable diffusion...")
@@ -181,7 +181,7 @@ def main():
         if inpaint: 
             mask = wombo_img.sum(dim=2) < 10
             wombo_img[mask] = -1.0
-            sq_init = run_inpainting_pipeline(wombo_img, mask.float(), strength=0.05, prompt=user_input)
+            sq_init = run_inpaint(wombo_img, mask.float(), prompt=user_input)
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[mask] = sq_init[mask]
 
