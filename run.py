@@ -60,8 +60,8 @@ def move_camera(extrinsics, direction, amount):
     
     if direction in ['w', 's']:
         # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
-        amount = -amount if direction == 'w' else amount
-        extrinsics[:3, 3] += torch.tensor([0, 0, 10.0*amount], device=extrinsics.device).float()
+        amount = 40.0 * (-amount if direction == 'w' else amount)
+        extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
         angle = torch.tensor(-amount if direction == 'd' else amount)
@@ -121,13 +121,9 @@ def main():
 
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
-        new_da_3d, new_da_colors = img_to_pts_3d(pil_img, extrinsics)
-        new_da_3d, new_da_colors = trim_points(new_da_3d, new_da_colors, border=32)
 
         if da_3d is None:
-            da_3d, da_colors = new_da_3d, new_da_colors
-        else:
-            da_3d, da_colors = merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors)
+            da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -139,6 +135,15 @@ def main():
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
         rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
         rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
+
+        # --- turn 3d points to image ---
+        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = pts_3d_to_img(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
+        image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
+        proj_da = proj_da.long()
+        proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
+        proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
+        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
+        wombo_img = image_t.clone().float() # only use existing points
 
         inpaint = False
         print("Hit (w, a, s, d) move, (q)uit, (b)reakpoint, or (t)ext for stable diffusion...")
@@ -152,20 +157,12 @@ def main():
         elif user_input.lower() == 'b':
             print(f"{user_input} --> breakpoint...")
             breakpoint()
+        elif user_input.lower() == 'm':
+            print(f"{user_input} --> modfill...")
+            wombo_img = mod_fill(image_t)      # blur points to make a smooth image
         else:
             user_input = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
-
-        # --- turn 3d points to image ---
-        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = pts_3d_to_img(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
-        image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
-        proj_da = proj_da.long()
-        proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
-        proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
-        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
-
-        # --- despeckle pipeline ---
-        wombo_img = image_t #mod_fill(image_t)
 
         # --- sideways pipeline ---
         if inpaint: 
@@ -174,6 +171,11 @@ def main():
             sq_init = run_inpaint(wombo_img, mask.float(), prompt=user_input)
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[mask] = sq_init[mask]
+
+            pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
+            new_da_3d, new_da_colors = img_to_pts_3d(pil_img, extrinsics)
+            new_da_3d, new_da_colors = trim_points(new_da_3d, new_da_colors, border=32)
+            da_3d, da_colors = merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors)
 
     rr.script_teardown(args)
 
