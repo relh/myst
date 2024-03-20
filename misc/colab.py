@@ -89,6 +89,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     print(f'seed is.. {seed}')
     generator = torch.Generator(device="cuda").manual_seed(seed)
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
+    #mask_image = pipeline.mask_processor.blur(mask_image, blur_factor=33)
 
     #'''
     output = pipeline(
@@ -114,7 +115,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     '''
 
     output_image = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
-    output_image = F.interpolate(output_image, size=(512, 512), mode='bilinear', align_corners=False)
+    output_image = F.interpolate(output_image, size=(512, 512), mode='nearest')
     output_image = output_image[:, :, pad_h:(None if pad_h == 0 else -pad_h), pad_w:(None if pad_w == 0 else -pad_w)]
 
     if pad_h > 0 and pad_w > 0:

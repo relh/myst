@@ -87,7 +87,7 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     args = parser.parse_args()
-    rr.script_setup(args, "12myst")
+    rr.script_setup(args, "13myst")
 
     # --- initial logging ---
     #rr.log("description", rr.TextDocument('',  media_type=rr.MediaType.MARKDOWN), timeless=True)
@@ -108,8 +108,9 @@ def main():
 
         # --- setup initial scene ---
         if image is None: 
-            user_input = input(f"enter stable diffusion initial scene: ")
-            image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=user_input)
+            #prompt = input(f"enter stable diffusion initial scene: ")
+            prompt = 'a high-resolution photo of a large kitchen'
+            image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
             mask = torch.ones(512, 512)
         else:
             image = wombo_img.to(torch.uint8)
@@ -124,9 +125,7 @@ def main():
 
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
-
-        if da_3d is None:
-            da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
+        if da_3d is None: da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -148,6 +147,7 @@ def main():
         image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
         wombo_img = image_t.clone().float() # only use existing points
 
+        infill = False
         inpaint = False
         print("hit (w, a, s, d, q, e) move, (f)ill, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
         user_input = get_keypress()
@@ -156,7 +156,9 @@ def main():
             print(f"{user_input} --> camera moved/rotated, extrinsics:\n", extrinsics)
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
-            wombo_img = fill(image_t)      # blur points to make a smooth image
+            #wombo_img = fill(image_t)      # blur points to make a smooth image
+            #infill = True
+            inpaint = True
         elif user_input.lower() == 'k':
             print(f"{user_input} --> kill...")
             break
@@ -164,7 +166,7 @@ def main():
             print(f"{user_input} --> breakpoint...")
             breakpoint()
         else:
-            user_input = input(f"{user_input} --> enter stable diffusion prompt: ")
+            prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
 
         # --- sideways pipeline ---
@@ -172,10 +174,11 @@ def main():
             wombo_img = fill(image_t)      # blur points to make a smooth image
             mask = wombo_img.sum(dim=2) < 10
             wombo_img[mask] = -1.0
-            sq_init = run_inpaint(wombo_img, mask.float(), prompt=user_input)
+            sq_init = run_inpaint(wombo_img, mask.float(), prompt=prompt)
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[mask] = sq_init[mask]
 
+        if inpaint or infill:
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
             new_da_3d, new_da_colors = img_to_pts_3d(pil_img, extrinsics)
             new_da_3d, new_da_colors = trim_points(new_da_3d, new_da_colors, border=32)

@@ -81,9 +81,8 @@ def prep_pil(pil_img):
     #    image = pil_img
     #else:
     #    b, g, r = pil_img.split()
-    # 
-    #     # Reassemble the image with bands in the correct order
-    #     image = Image.merge("RGB", (r, g, b))
+    #    # Reassemble the image with bands in the correct order
+    #    image = Image.merge("RGB", (r, g, b))
     image = pil_img
     width, height = image.size
     split_point = width // 2
