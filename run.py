@@ -62,6 +62,10 @@ def move_camera(extrinsics, direction, amount):
         # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
         amount = 40.0 * (-amount if direction == 'w' else amount)
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
+    elif direction in ['q', 'e']:
+        # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
+        amount = 40.0 * (-amount if direction == 'e' else amount)
+        extrinsics[:3, 3] += torch.tensor([0, amount, 0], device=extrinsics.device).float()
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
         angle = torch.tensor(-amount if direction == 'd' else amount)
@@ -83,7 +87,7 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     args = parser.parse_args()
-    rr.script_setup(args, "10myst")
+    rr.script_setup(args, "12myst")
 
     # --- initial logging ---
     #rr.log("description", rr.TextDocument('',  media_type=rr.MediaType.MARKDOWN), timeless=True)
@@ -104,8 +108,7 @@ def main():
 
         # --- setup initial scene ---
         if image is None: 
-            #user_input = input("Describe initial scene: ")
-            user_input = "A photo of an open floorplan kitchen."
+            user_input = input(f"enter stable diffusion initial scene: ")
             image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=user_input)
             mask = torch.ones(512, 512)
         else:
@@ -146,26 +149,29 @@ def main():
         wombo_img = image_t.clone().float() # only use existing points
 
         inpaint = False
-        print("Hit (w, a, s, d) move, (q)uit, (b)reakpoint, or (t)ext for stable diffusion...")
+        print("hit (w, a, s, d, q, e) move, (f)ill, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
         user_input = get_keypress()
-        if user_input.lower() in ['w', 'a', 's', 'd']:
+        if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
             print(f"{user_input} --> camera moved/rotated, extrinsics:\n", extrinsics)
-        elif user_input.lower() == 'q':
-            print(f"{user_input} --> quiting...")
+        elif user_input.lower() == 'f':
+            print(f"{user_input} --> fill...")
+            #wombo_img = fill(image_t)      # blur points to make a smooth image
+            user_input = ''
+            inpaint = True 
+        elif user_input.lower() == 'k':
+            print(f"{user_input} --> kill...")
             break
         elif user_input.lower() == 'b':
             print(f"{user_input} --> breakpoint...")
             breakpoint()
-        elif user_input.lower() == 'm':
-            print(f"{user_input} --> modfill...")
-            wombo_img = mod_fill(image_t)      # blur points to make a smooth image
         else:
             user_input = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
 
         # --- sideways pipeline ---
         if inpaint: 
+            wombo_img = fill(image_t)      # blur points to make a smooth image
             mask = wombo_img.sum(dim=2) < 10
             wombo_img[mask] = -1.0
             sq_init = run_inpaint(wombo_img, mask.float(), prompt=user_input)

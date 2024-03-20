@@ -62,7 +62,7 @@ def tensor_to_square_pil(image, mask, zoom=(456.0 / 512.0)):
     return output_image, output_mask, pad_h, pad_w
 
 
-def initialize_pipeline(model):
+def initialize_pipeline():
     global pipeline
 
     pipeline = AutoPipelineForInpainting.from_pretrained(
@@ -77,15 +77,16 @@ def initialize_pipeline(model):
 
 
 # Function to run inpainting pipeline
-def run_inpaint(image: Image, mask_image: Image, prompt: str, seed: int = 12345, model: str = 'stabilityai/stable-diffusion-2-1'):
+def run_inpaint(image: Image, mask_image: Image, prompt: str):
     global pipeline
     if pipeline is None:
-        initialize_pipeline(model)
+        initialize_pipeline()
         strength = pipeline.initial_strength
     else:
         strength = pipeline.next_strength 
 
     seed = random.randint(0, 99999)
+    print(f'seed is.. {seed}')
     generator = torch.Generator(device="cuda").manual_seed(seed)
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
 

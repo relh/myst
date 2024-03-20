@@ -31,7 +31,7 @@ from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 #torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
-def mod_fill(tensor):
+def fill(tensor):
     tensor = tensor.to(torch.float32)
 
     # Mask of zeros in all channels
