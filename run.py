@@ -149,7 +149,7 @@ def main():
 
         infill = False
         inpaint = False
-        print("hit (w, a, s, d, q, e) move, (f)ill, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
+        print("press (w, a, s, d, q, e) move, (f)ill, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
         user_input = get_keypress()
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
