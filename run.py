@@ -29,6 +29,7 @@ from torchvision.transforms import ToPILImage, ToTensor
 from ek_fields_utils.colmap_rw_utils import read_model
 from merge import *
 from metric_depth import img_to_pts_3d, pts_3d_to_img
+from metric_dust import img_to_pts_3d_dust
 from misc.colab import run_inpaint
 from misc.control import generate_outpainted_image
 from misc.outpainting import run
@@ -64,7 +65,7 @@ def move_camera(extrinsics, direction, amount):
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
     elif direction in ['q', 'e']:
         # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
-        amount = 40.0 * (-amount if direction == 'e' else amount)
+        amount = 40.0 * (-amount if direction == 'q' else amount)
         extrinsics[:3, 3] += torch.tensor([0, amount, 0], device=extrinsics.device).float()
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
@@ -125,7 +126,8 @@ def main():
 
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
-        if da_3d is None: da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
+        #if da_3d is None: da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
+        if da_3d is None: da_3d, da_colors = img_to_pts_3d_dust(pil_img, extrinsics)
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)

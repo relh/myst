@@ -82,7 +82,8 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     if pipeline is None:
         initialize_pipeline()
         strength = pipeline.initial_strength
-        seed = 50618
+        #seed = 50618
+        seed = random.randint(0, 99999)
     else:
         strength = pipeline.next_strength 
         seed = random.randint(0, 99999)

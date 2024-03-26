@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 depth_anything/
+dust3r/
 
 __pycache__/
 *.py[cod]
