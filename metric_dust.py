@@ -30,7 +30,7 @@ def _resize_pil_image(img, long_edge_size):
     return img.resize(new_size, interp)
 
 
-def load_images(color_image, size, square_ok=False):
+def load_images(color_image, size, square_ok=True):
     imgs = []
     img = exif_transpose(color_image)
     W1, H1 = img.size
@@ -66,15 +66,13 @@ def load_images(color_image, size, square_ok=False):
 
 def img_to_pts_3d_dust(color_image, extrinsics):
     global dust_model
+    device = 'cuda'
+    batch_size = 1
+    get_focals = False
     if dust_model is None:
         model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
-        device = 'cuda'
-        batch_size = 1
-        schedule = 'cosine'
-        lr = 0.01
-        niter = 300
-
         dust_model = load_model(model_path, device)
+        get_focals = True
 
     images = load_images(color_image, size=512)
 
@@ -89,15 +87,13 @@ def img_to_pts_3d_dust(color_image, extrinsics):
 
     # retrieve useful values from scene:
     imgs = scene.imgs
-    focals = scene.get_focals()
-    poses = scene.get_im_poses()
     pts3d = scene.get_pts3d()
-    confidence_masks = scene.get_masks()
-
-    # visualize reconstruction
-    #scene.show()
-    cm_colors = torch.stack([confidence_masks[0], confidence_masks[1], confidence_masks[0]]).permute(1,2,0)
-    return pts3d[0].reshape(-1, 3), cm_colors.reshape(-1, 3)
+    #confidence_masks = scene.get_masks()
+    if get_focals:
+        focals = scene.get_focals()
+        poses = scene.get_im_poses()
+        return torch.tensor(pts3d[0].reshape(-1, 3) * 500.0), torch.tensor(imgs[0].reshape(-1, 3)).to('cuda'), focals[0]
+    return torch.tensor(pts3d[0].reshape(-1, 3) * 500.0), torch.tensor(imgs[0].reshape(-1, 3)).to('cuda'), None
 
 
 if __name__ == '__main__':

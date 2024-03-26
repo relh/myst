@@ -43,7 +43,17 @@ DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
 
 model = None
 
-def img_to_pts_3d(color_image, extrinsics):
+def pts_cam_to_pts_world(points_camera_coord, extrinsics):
+    extrinsics_inv = torch.linalg.inv(extrinsics)
+
+    points_camera_coord_tensor = torch.tensor(points_camera_coord, dtype=torch.float32, device='cuda')
+    points_homogeneous = torch.cat((points_camera_coord_tensor, torch.ones(points_camera_coord_tensor.shape[0], 1, device=points_camera_coord_tensor.device)), dim=1)
+    points_world_coord = torch.mm(extrinsics_inv, points_homogeneous.t()).t()[:, :3]  # Apply extrinsics
+
+    colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
+    da_colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
+
+def img_to_pts_3d(color_image):
     global model
     if model is None:
         config = get_config('zoedepth', "eval", DATASET)
@@ -73,6 +83,7 @@ def img_to_pts_3d(color_image, extrinsics):
 
     # Compute 3D points in camera coordinates
     points_camera_coord = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3) * 50.0
+    return pts_cam_to_pts_world(points_camera_coord, extrinsics)
     extrinsics_inv = torch.linalg.inv(extrinsics)
     
     # Convert to torch tensor and apply extrinsics to get points in world coordinates

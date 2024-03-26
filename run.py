@@ -127,7 +127,10 @@ def main():
         # --- estimate depth ---
         pil_img = Image.fromarray(image.cpu().numpy())
         #if da_3d is None: da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
-        if da_3d is None: da_3d, da_colors = img_to_pts_3d_dust(pil_img, extrinsics)
+        if da_3d is None: 
+            da_3d, da_colors, focals = img_to_pts_3d_dust(pil_img, extrinsics)
+            intrinsics[0, 0] = focals
+            intrinsics[1, 1] = focals
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -146,7 +149,8 @@ def main():
         proj_da = proj_da.long()
         proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
         proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
-        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
+        #image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
+        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors.to(torch.uint8)
         wombo_img = image_t.clone().float() # only use existing points
 
         infill = False
@@ -182,7 +186,7 @@ def main():
 
         if inpaint or infill:
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
-            new_da_3d, new_da_colors = img_to_pts_3d(pil_img, extrinsics)
+            new_da_3d, new_da_colors, _ = img_to_pts_3d_dust(pil_img, extrinsics)
             new_da_3d, new_da_colors = trim_points(new_da_3d, new_da_colors, border=32)
             da_3d, da_colors = merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors)
 
