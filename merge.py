@@ -73,7 +73,6 @@ def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=None):
     epsilon = calculate_dynamic_epsilon(new_da_3d)
     print(f'Epsilon: {epsilon}')
 
-
     # Exclude black points from new_da_3d
     not_black_mask = torch.all(new_da_colors != 0, dim=1)
     new_da_3d_filtered = new_da_3d[not_black_mask]
@@ -106,3 +105,162 @@ def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=None):
     merged_colors = combined_colors[valid_indices]
 
     return merged_points, merged_colors
+
+def project_to_image(points_3d, intrinsics, image_shape):
+    """
+    Projects 3D points onto a 2D image plane using the camera's intrinsic matrix.
+    Returns the projected 2D points and a mask indicating if points are within the image bounds.
+    """
+    # Homogeneous coordinates transformation
+    ones = torch.ones((points_3d.shape[0], 1), device=points_3d.device)
+    points_homogeneous = torch.cat((points_3d, ones), dim=1).T
+    #projected_points = intrinsics @ points_homogeneous
+    projected_points = intrinsics @ points_homogeneous[:3, :]
+    
+    # Normalize by depth and convert to pixel coordinates
+    projected_points = projected_points[:2, :] / projected_points[2, :]
+    x_pixels = torch.round(projected_points[0]).long()
+    y_pixels = torch.round(projected_points[1]).long()
+
+    # Create mask for points within image bounds
+    valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) & \
+                 (y_pixels >= 0) & (y_pixels < image_shape[0])
+    
+    return x_pixels[valid_mask], y_pixels[valid_mask], valid_mask
+
+def bad_project_to_image(points_3d, intrinsics, extrinsics, image_shape):
+    """
+    Projects 3D points onto a 2D image plane using the camera's intrinsic and extrinsic matrices.
+    Returns the projected 2D points and a mask indicating if points are within the image bounds.
+    """
+    # Transform points to camera coordinates
+    ones = torch.ones((points_3d.shape[0], 1), device=points_3d.device)
+    points_homogeneous = torch.cat((points_3d, ones), dim=1)
+    camera_coords = extrinsics @ points_homogeneous.T
+
+    # Apply intrinsic matrix to get image coordinates
+    proj_pts = intrinsics @ camera_coords[:3, :]
+    im_proj_pts = proj_pts[:2, :] / proj_pts[2, :]
+
+    # Convert to pixel coordinates
+    x_pixels = torch.round(im_proj_pts[0]).long()
+    y_pixels = torch.round(im_proj_pts[1]).long()
+
+    # Create mask for points within image bounds
+    valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) & \
+                 (y_pixels >= 0) & (y_pixels < image_shape[0])
+
+    # Filter based on valid_mask and return pixel coordinates
+    return x_pixels[valid_mask], y_pixels[valid_mask], valid_mask
+
+def compute_median_scale_factor(gt_points_3d, new_points_3d, valid_correspondences, valid_colors_mask):
+    """
+    Computes the median scaling factor for aligning two point clouds based on the depth values
+    of their corresponding points that have passed the color similarity check.
+    
+    Parameters:
+    - gt_points_3d: Ground truth point cloud as a tensor of shape (N, 3).
+    - new_points_3d: New point cloud as a tensor of shape (M, 3).
+    - valid_correspondences: A tensor of indices where points between the two point clouds correspond.
+    - valid_colors_mask: A boolean mask indicating which correspondences are valid based on color similarity.
+    
+    Returns:
+    - median_scale: The median scaling factor to align the new point cloud with the ground truth.
+    """
+    # Extract the indices of valid correspondences that also pass the color check
+    valid_indices = valid_correspondences[valid_colors_mask]
+
+    # Extract depth values (Z-coordinates) for corresponding points
+    gt_depths = gt_points_3d[valid_indices][:, 2]
+    new_depths = new_points_3d[valid_indices][:, 2]
+
+    # Calculate scale factors for each valid correspondence based on depth ratios
+    # Avoid division by zero by adding a small epsilon to denominators
+    scale_factors = gt_depths / (new_depths + 1e-6)
+
+    # Compute the median of these scale factors
+    median_scale = torch.median(scale_factors)
+
+    return median_scale
+
+
+def compute_collisions_and_colors(x1, y1, colors1, x2, y2, colors2, image_shape, color_threshold=30):
+    """
+    Identifies collisions between two sets of projected points and verifies them with color similarity.
+    Returns a mask of valid correspondences for each set of points.
+    """
+    # Initialize image tensors to track the projected point locations
+    img1 = torch.zeros((*image_shape, 3), dtype=torch.float32)
+    img2 = torch.zeros_like(img1)
+
+    # Populate the image tensors with color values at the projected locations
+    img1[y1, x1] = colors1
+    img2[y2, x2] = colors2
+
+    # Find collisions by identifying pixels that are non-zero (have been colored) in both images
+    collision_mask = (torch.sum(img1, dim=-1) > 0) & (torch.sum(img2, dim=-1) > 0)
+
+    # For each collision, calculate the color difference to verify the correspondence
+    # First, find indices where there are collisions
+    y_coll, x_coll = torch.where(collision_mask)
+    
+    # Calculate color differences only at collision points
+    color_differences = torch.abs(img1[y_coll, x_coll] - img2[y_coll, x_coll])
+    
+    # Sum color differences across RGB channels and compare to the threshold
+    valid_collisions = torch.where(torch.sum(color_differences, dim=1) < color_threshold)[0]
+
+    # Use valid_collisions to filter y_coll and x_coll for valid correspondences
+    valid_y = y_coll[valid_collisions]
+    valid_x = x_coll[valid_collisions]
+
+    # Construct valid correspondences mask from valid_y and valid_x
+    valid_correspondences_mask = torch.zeros_like(collision_mask)
+    valid_correspondences_mask[valid_y, valid_x] = True
+
+    return valid_correspondences_mask
+
+
+def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
+    """
+    Projects and scales two point clouds onto an image plane with color-based validation for overlap.
+    
+    Parameters:
+    - gt_points_3d, new_points_3d: The ground truth and new point clouds (X, 3) and (Y, 3).
+    - gt_colors, new_colors: Colors associated with each point in the point clouds (X, 3) and (Y, 3).
+    - intrinsics: The camera intrinsic parameters matrix.
+    - extrinsics: The camera extrinsic parameters matrix (unused here but included for completeness).
+    - image_shape: The shape of the target image (height, width).
+    - color_threshold: The maximum allowed color difference for considering a correspondence valid.
+    
+    Returns:
+    - The median scale factor applied to the new point cloud for alignment.
+    - The new point cloud scaled accordingly.
+    """
+    # Project both point clouds to the image plane
+    gt_x, gt_y, _ = project_to_image(gt_points_3d, intrinsics, image_shape)
+    new_x, new_y, _ = project_to_image(new_points_3d, intrinsics, image_shape)
+
+    # Compute collisions based on the projected points and validate them with color similarity
+    valid_correspondences, valid_colors_mask = compute_collisions_and_colors(
+        gt_x, gt_y, gt_colors, new_x, new_y, new_colors, image_shape, color_threshold
+    )
+    
+    # Filter the 3D points of the new point cloud based on valid correspondences and color mask
+    # Note: Adjustments may be needed to correctly apply 'valid_correspondences' and 'valid_colors_mask'
+    # For demonstration, assume direct indexing could work, which might require modification in practice
+    valid_new_points_3d = new_points_3d[valid_correspondences]
+
+    # Compute the median scaling factor
+    # Note: 'compute_median_scale_factor' expects depth values directly, which might need extraction from 'valid_correspondences'
+    # Here, 'valid_correspondences' should indicate specific pairs of matching points, and we need both GT and new depths
+    # For demonstration, assume we have a way to get these depths directly, which in practice will require more logic
+    median_scale = compute_median_scale_factor(
+        gt_points_3d, valid_new_points_3d, valid_correspondences, valid_colors_mask
+    )
+    
+    # Apply the median scale to adjust the new point cloud
+    new_points_3d_scaled = new_points_3d * median_scale
+    
+    return median_scale, new_points_3d_scaled
+

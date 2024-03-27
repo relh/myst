@@ -114,7 +114,7 @@ def pts_3d_to_img(points_3d, colors, intrinsics, extrinsics, image_shape, this_m
 
     return im_proj_pts.T[unocc][:, :2], \
            points_3d[visible][unocc], \
-           (None if colors is None else colors[visible][unocc]), \
+           (None if colors is None else colors[visible][unocc])
 
 
 if __name__ == '__main__':
