@@ -64,7 +64,7 @@ def load_images(color_image, size, square_ok=True):
     return imgs
 
 
-def img_to_pts_3d_dust(color_image, extrinsics):
+def img_to_pts_3d_dust(color_image):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -75,7 +75,6 @@ def img_to_pts_3d_dust(color_image, extrinsics):
         get_focals = True
 
     images = load_images(color_image, size=512)
-
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
 
@@ -86,14 +85,17 @@ def img_to_pts_3d_dust(color_image, extrinsics):
     scene = global_aligner(output, device=device, mode=GlobalAlignerMode.PairViewer)
 
     # retrieve useful values from scene:
-    imgs = scene.imgs
     pts3d = scene.get_pts3d()
+    #imgs = scene.imgs
     #confidence_masks = scene.get_masks()
+
+    focals = None
     if get_focals:
-        focals = scene.get_focals()
-        poses = scene.get_im_poses()
-        return torch.tensor(pts3d[0].reshape(-1, 3) * 500.0), torch.tensor(imgs[0].reshape(-1, 3)).to('cuda'), focals[0]
-    return torch.tensor(pts3d[0].reshape(-1, 3) * 500.0), torch.tensor(imgs[0].reshape(-1, 3)).to('cuda'), None
+        focals = scene.get_focals()[0]
+        poses = scene.get_im_poses()[0]
+
+    return torch.tensor(pts3d[0].reshape(-1, 3) * 500.0), \
+           torch.tensor(np.asarray(color_image).reshape(-1, 3)).to('cuda'), focals
 
 
 if __name__ == '__main__':

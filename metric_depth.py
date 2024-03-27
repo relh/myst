@@ -43,17 +43,13 @@ DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
 
 model = None
 
-def pts_cam_to_pts_world(points_camera_coord, extrinsics):
+def pts_cam_to_pts_world(points_camera_coord_tensor, extrinsics):
     extrinsics_inv = torch.linalg.inv(extrinsics)
-
-    points_camera_coord_tensor = torch.tensor(points_camera_coord, dtype=torch.float32, device='cuda')
     points_homogeneous = torch.cat((points_camera_coord_tensor, torch.ones(points_camera_coord_tensor.shape[0], 1, device=points_camera_coord_tensor.device)), dim=1)
     points_world_coord = torch.mm(extrinsics_inv, points_homogeneous.t()).t()[:, :3]  # Apply extrinsics
+    return points_world_coord
 
-    colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
-    da_colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
-
-def img_to_pts_3d(color_image):
+def img_to_pts_3d_da(color_image):
     global model
     if model is None:
         config = get_config('zoedepth', "eval", DATASET)
@@ -83,17 +79,12 @@ def img_to_pts_3d(color_image):
 
     # Compute 3D points in camera coordinates
     points_camera_coord = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3) * 50.0
-    return pts_cam_to_pts_world(points_camera_coord, extrinsics)
-    extrinsics_inv = torch.linalg.inv(extrinsics)
-    
-    # Convert to torch tensor and apply extrinsics to get points in world coordinates
     points_camera_coord_tensor = torch.tensor(points_camera_coord, dtype=torch.float32, device='cuda')
-    points_homogeneous = torch.cat((points_camera_coord_tensor, torch.ones(points_camera_coord_tensor.shape[0], 1, device=points_camera_coord_tensor.device)), dim=1)
-    points_world_coord = torch.mm(extrinsics_inv, points_homogeneous.t()).t()[:, :3]  # Apply extrinsics
 
     colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
-    da_colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
-    return points_world_coord, da_colors
+    colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
+    return points_camera_coord_tensor, colors, None
+
 
 def pts_3d_to_img(points_3d, colors, intrinsics, extrinsics, image_shape, this_mask=None):
     points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
@@ -115,19 +106,15 @@ def pts_3d_to_img(points_3d, colors, intrinsics, extrinsics, image_shape, this_m
 
     if this_mask == None: this_mask = torch.zeros((512, 512), device=points_3d.device)
     unocc = this_mask[y_pixels, x_pixels] == 0
-    occ = this_mask[y_pixels, x_pixels] == 1
+    #occ = this_mask[y_pixels, x_pixels] == 1
 
     depth_map = torch.full(image_shape, float('inf'), device=points_3d.device)
     depth_map[y_pixels[unocc], x_pixels[unocc]] = torch.min(depth_map[y_pixels[unocc], x_pixels[unocc]], proj_pts[2][unocc])
     depth_map[depth_map == float('inf')] = 0
 
     return im_proj_pts.T[unocc][:, :2], \
-           im_proj_pts.T[occ][:, :2], \
-           depth_map, \
            points_3d[visible][unocc], \
-           points_3d[visible][occ], \
            (None if colors is None else colors[visible][unocc]), \
-           (None if colors is None else colors[visible][occ])
 
 
 if __name__ == '__main__':

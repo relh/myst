@@ -25,8 +25,8 @@ from torchvision.transforms.functional import pad, to_pil_image
 pipeline = None
 
 def tensor_to_square_pil(image, mask, zoom=(456.0 / 512.0)):
-    image_tensor = torch.tensor(rearrange(image / 255.0, 'h w c -> 1 c h w'), dtype=torch.float32)
-    mask_tensor = torch.tensor(rearrange(mask, 'h w -> 1 1 h w'), dtype=torch.float32)
+    image_tensor = rearrange(image / 255.0, 'h w c -> 1 c h w').to(torch.float32)
+    mask_tensor = rearrange(mask, 'h w -> 1 1 h w').to(torch.float32)
 
     # Calculate zoom and get affine transformation
     _, c, h, w = image_tensor.shape

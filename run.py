@@ -28,7 +28,7 @@ from torchvision.transforms import ToPILImage, ToTensor
 
 from ek_fields_utils.colmap_rw_utils import read_model
 from merge import *
-from metric_depth import img_to_pts_3d, pts_3d_to_img
+from metric_depth import img_to_pts_3d_da, pts_3d_to_img, pts_cam_to_pts_world
 from metric_dust import img_to_pts_3d_dust
 from misc.colab import run_inpaint
 from misc.control import generate_outpainted_image
@@ -87,15 +87,13 @@ def main():
     # --- setup rerun args ---
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
+    parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     args = parser.parse_args()
     rr.script_setup(args, "13myst")
-
-    # --- initial logging ---
-    #rr.log("description", rr.TextDocument('',  media_type=rr.MediaType.MARKDOWN), timeless=True)
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
-    # Iterate through images (video frames) logging data related to each frame.
-    da_3d = None
+    img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
+    depth_3d = None
     image = None
     mask = None
     extrinsics = None
@@ -125,16 +123,18 @@ def main():
                                        [0, 0, 0, 1]]).float().cuda()
 
         # --- estimate depth ---
-        pil_img = Image.fromarray(image.cpu().numpy())
-        #if da_3d is None: da_3d, da_colors = img_to_pts_3d(pil_img, extrinsics)
-        if da_3d is None: 
-            da_3d, da_colors, focals = img_to_pts_3d_dust(pil_img, extrinsics)
-            intrinsics[0, 0] = focals
-            intrinsics[1, 1] = focals
+        if depth_3d is None: 
+            pil_img = Image.fromarray(image.cpu().numpy())
+            depth_3d, depth_colors, focals = img_to_pts_3d(pil_img)
+            depth_3d = pts_cam_to_pts_world(depth_3d, extrinsics)
+
+            if focals is not None:
+                intrinsics[0, 0] = focals
+                intrinsics[1, 1] = focals
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
-        rr.log(f"world/points", rr.Points3D(da_3d.cpu().numpy(), colors=da_colors.cpu().numpy()), timeless=True)
+        rr.log(f"world/points", rr.Points3D(depth_3d.cpu().numpy(), colors=depth_colors.cpu().numpy()), timeless=True)
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
                            mat3x3=extrinsics[:3, :3].cpu().numpy(), from_parent=True))
@@ -143,16 +143,7 @@ def main():
         rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
         rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
-        # --- turn 3d points to image ---
-        proj_da, _, _, vis_da_3d, _, vis_da_colors, _ = pts_3d_to_img(da_3d, da_colors, intrinsics, extrinsics, (512, 512))
-        image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
-        proj_da = proj_da.long()
-        proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
-        proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
-        #image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors
-        image_t[proj_da[:, 1], proj_da[:, 0]] = vis_da_colors.to(torch.uint8)
-        wombo_img = image_t.clone().float() # only use existing points
-
+        # --- get user input ---
         infill = False
         inpaint = False
         print("press (w, a, s, d, q, e) move, (f)ill, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
@@ -175,6 +166,16 @@ def main():
             prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
 
+        # --- turn 3d points to image ---
+        proj_da, vis_depth_3d, vis_depth_colors = pts_3d_to_img(depth_3d, depth_colors, intrinsics, extrinsics, (512, 512))
+        image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
+        proj_da = proj_da.long()
+        proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
+        proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
+        #image_t[proj_da[:, 1], proj_da[:, 0]] = vis_depth_colors
+        image_t[proj_da[:, 1], proj_da[:, 0]] = (vis_depth_colors * 1.0).to(torch.uint8)
+        wombo_img = image_t.clone().float() # only use existing points
+
         # --- sideways pipeline ---
         if inpaint: 
             wombo_img = fill(image_t)      # blur points to make a smooth image
@@ -186,9 +187,10 @@ def main():
 
         if inpaint or infill:
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
-            new_da_3d, new_da_colors, _ = img_to_pts_3d_dust(pil_img, extrinsics)
-            new_da_3d, new_da_colors = trim_points(new_da_3d, new_da_colors, border=32)
-            da_3d, da_colors = merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors)
+            new_depth_3d, new_depth_colors, _ = img_to_pts_3d(pil_img)
+            new_depth_3d = pts_cam_to_pts_world(new_depth_3d, extrinsics)
+            new_depth_3d, new_depth_colors = trim_points(new_depth_3d, new_depth_colors, border=32)
+            depth_3d, depth_colors = merge_and_filter(depth_3d, new_depth_3d, depth_colors, new_depth_colors)
 
     rr.script_teardown(args)
 
