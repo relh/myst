@@ -1,7 +1,14 @@
-# Byte-compiled / optimized / DLL files
+dataset/
+cache/
+assets/
+checkpoints/
+
+# Third party libraries
+Marigold/
 depth_anything/
 dust3r/
 
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
