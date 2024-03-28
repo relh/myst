@@ -27,14 +27,15 @@ from pytorch3d.transforms import matrix_to_quaternion
 from torchvision.transforms import ToPILImage, ToTensor
 
 from ek_fields_utils.colmap_rw_utils import read_model
-from merge import *
 from metric_depth import img_to_pts_3d_da, pts_3d_to_img, pts_cam_to_pts_world
 from metric_dust import img_to_pts_3d_dust
-from misc.colab import run_inpaint
 from misc.control import generate_outpainted_image
+from misc.inpaint import run_inpaint
+from misc.merge import *
 from misc.outpainting import run
 from misc.replicate_me import run_replicate_with_pil
-from utils import *
+from misc.scale import *
+from misc.utils import *
 
 
 def get_keypress():
