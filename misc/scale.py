@@ -3,81 +3,93 @@
 
 import torch
 
-def project_to_image(points_3d, intrinsics, image_shape):
+def project_to_image(points_3d, intrinsics, extrinsics, image_shape):
     """
-    Projects 3D points onto a 2D image plane using the camera's intrinsic matrix.
-    Returns the projected 2D points and a mask indicating if points are within the image bounds.
+    Projects 3D points onto a 2D image plane using the camera's extrinsic and intrinsic matrices.
+    Returns the projected 2D points, their original indices, and a mask indicating if points are within the image bounds.
     """
-    # Homogeneous coordinates transformation
-    ones = torch.ones((points_3d.shape[0], 1), device=points_3d.device)
-    points_homogeneous = torch.cat((points_3d, ones), dim=1).T
-    #projected_points = intrinsics @ points_homogeneous
-    projected_points = intrinsics @ points_homogeneous[:3, :]
-    
-    # Normalize by depth and convert to pixel coordinates
-    projected_points = projected_points[:2, :] / projected_points[2, :]
-    x_pixels = torch.round(projected_points[0]).long()
-    y_pixels = torch.round(projected_points[1]).long()
+    # Transform points to camera coordinates
+    points_homogeneous = torch.cat((points_3d, torch.ones((points_3d.shape[0], 1), device=points_3d.device)), dim=1).T
+    camera_coords = extrinsics @ points_homogeneous
 
-    # Create mask for points within image bounds
-    valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) & \
-                 (y_pixels >= 0) & (y_pixels < image_shape[0])
-    
-    return x_pixels[valid_mask], y_pixels[valid_mask], valid_mask
+    # Project points using the intrinsic matrix
+    proj_pts = intrinsics @ camera_coords[:3, :]
+    im_proj_pts = proj_pts[:2] / proj_pts[2]
 
-def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
-    # Project both point clouds to the image plane
-    gt_x, gt_y, gt_mask = project_to_image(gt_points_3d, intrinsics, image_shape)
-    new_x, new_y, new_mask = project_to_image(new_points_3d, intrinsics, image_shape)
+    # Convert to pixel coordinates and filter based on image bounds
+    x_pixels = torch.round(im_proj_pts[0]).long()
+    y_pixels = torch.round(im_proj_pts[1]).long()
+    valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) & (y_pixels >= 0) & (y_pixels < image_shape[0])
 
-    # Create a mask of valid points for both point clouds
-    valid_mask = torch.zeros(image_shape, dtype=torch.bool)
-    valid_mask[gt_y[gt_mask], gt_x[gt_mask]] = True
-    valid_mask[new_y[new_mask], new_x[new_mask]] = True
+    # Filter out invalid points
+    valid_x = x_pixels[valid_mask]
+    valid_y = y_pixels[valid_mask]
+    valid_indices = torch.arange(points_3d.shape[0], device=points_3d.device)[valid_mask]
 
-    # Find the indices of the valid points in the original point clouds
-    gt_indices = torch.arange(gt_points_3d.shape[0])[gt_mask]
-    new_indices = torch.arange(new_points_3d.shape[0])[new_mask]
+    return torch.stack([valid_x, valid_y], dim=1), valid_indices
 
-    # Create a tensor to store the projected points and their corresponding indices
-    gt_projected = torch.stack((gt_x[gt_mask], gt_y[gt_mask], gt_indices), dim=1)
-    new_projected = torch.stack((new_x[new_mask], new_y[new_mask], new_indices), dim=1)
+def composite_key_for_projections(projections, image_shape):
+    """
+    Generate a composite key for each projection to facilitate finding unique projections and collisions.
+    This assumes projections are already filtered to be within image bounds.
+    """
+    return projections[:, 0] + projections[:, 1] * image_shape[1]
 
-    # Combine the projected points and find unique collisions
-    combined_projected = torch.cat((gt_projected, new_projected), dim=0)
-    unique_projected, counts = torch.unique(combined_projected[:, :2], dim=0, return_counts=True)
+def find_shared_projections_and_compare_colors(gt_proj, new_proj, gt_indices, new_indices, gt_colors, new_colors, color_threshold):
+    """
+    Identifies shared projections between two point clouds and compares colors of corresponding points.
+    Uses efficient operations for GPU execution.
+    """
+    # Combine projections and find unique projections
+    combined_proj = torch.cat([gt_proj, new_proj], dim=0)
+    unique_proj, inverse_indices, counts = torch.unique(combined_proj, dim=0, return_inverse=True, return_counts=True)
 
-    # Filter the collisions based on count and create a mask
-    collision_mask = counts > 1
-    collision_points = unique_projected[collision_mask]
+    # Identify projections that appear in both point clouds (shared projections)
+    shared_mask = counts > 1
+    shared_proj = unique_proj[shared_mask]
 
-    # Extract the indices of the colliding points in the original point clouds
-    gt_collision_indices = collision_points[:, 2].long()
-    new_collision_indices = collision_points[:, 2].long() - gt_projected.shape[0]
+    # Find indices of the first occurrence of shared projections in each point cloud
+    gt_shared_indices = torch.where(shared_mask[:gt_proj.shape[0]])[0]
+    new_shared_indices = torch.where(shared_mask[gt_proj.shape[0]:])[0]
 
-    # Extract the colors of the colliding points
-    gt_collision_colors = gt_colors[gt_collision_indices]
-    new_collision_colors = new_colors[new_collision_indices]
+    # Get colors of shared projections
+    gt_shared_colors = gt_colors[gt_indices[gt_shared_indices]]
+    new_shared_colors = new_colors[new_indices[new_shared_indices]]
 
-    # Compute the color differences and create a mask for valid correspondences
-    color_diffs = torch.norm(gt_collision_colors - new_collision_colors, dim=1)
+    # Ensure gt_shared_colors and new_shared_colors have the same length
+    min_length = min(gt_shared_colors.shape[0], new_shared_colors.shape[0])
+    gt_shared_colors = gt_shared_colors[:min_length]
+    new_shared_colors = new_shared_colors[:min_length]
+
+    # Compare colors and find valid correspondences
+    color_diffs = torch.norm(gt_shared_colors - new_shared_colors, dim=1)
     valid_correspondences_mask = color_diffs < color_threshold
 
-    # Extract the valid corresponding 3D points
-    gt_valid_points = gt_points_3d[gt_collision_indices[valid_correspondences_mask]]
-    new_valid_points = new_points_3d[new_collision_indices[valid_correspondences_mask]]
+    # Filter indices based on valid correspondences
+    valid_gt_indices = gt_indices[gt_shared_indices[valid_correspondences_mask]]
+    valid_new_indices = new_indices[new_shared_indices[valid_correspondences_mask]]
 
-    # Compute the median scaling factor
-    gt_depths = gt_valid_points[:, 2]
-    new_depths = new_valid_points[:, 2]
+    return valid_gt_indices, valid_new_indices
 
-    # Calculate scale factors for each valid correspondence based on depth ratios
-    scale_factors = gt_depths / (new_depths + 1e-6)
+def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
+    """
+    Projects 3D points to 2D, identifies shared projections, and compares colors to find valid matches efficiently.
+    """
+    # Project points to 2D space
+    gt_proj, gt_indices = project_to_image(gt_points_3d, intrinsics, extrinsics, image_shape)
+    new_proj, new_indices = project_to_image(new_points_3d, intrinsics, extrinsics, image_shape)
 
-    # Compute the median of these scale factors
+    # Find shared projections and compare colors
+    valid_gt_indices, valid_new_indices = find_shared_projections_and_compare_colors(
+        gt_proj, new_proj, gt_indices, new_indices, gt_colors, new_colors, color_threshold
+    )
+
+    if len(valid_gt_indices) == 0 or len(valid_new_indices) == 0:
+        return torch.tensor(1.0), new_points_3d  # No scaling if no matches
+
+    # Compute scaling factor and apply to new point cloud
+    scale_factors = gt_points_3d[valid_gt_indices][:, 2] / (new_points_3d[valid_new_indices][:, 2] + 1e-6)
     median_scale = torch.median(scale_factors)
-
-    # Apply the median scale to adjust the new point cloud
     new_points_3d_scaled = new_points_3d * median_scale
 
     return median_scale, new_points_3d_scaled

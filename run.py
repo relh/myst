@@ -190,7 +190,7 @@ def main():
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
             new_depth_3d, new_depth_colors, _ = img_to_pts_3d(pil_img)
             new_depth_3d = pts_cam_to_pts_world(new_depth_3d, extrinsics)
-            median_scale, new_depth_3d = project_and_scale_points_with_color(depth_3d, new_depth_3d, depth_colors, new_depth_colors, intrinsics, extrinsics, (512, 512))
+            median_scale, new_depth_3d = project_and_scale_points_with_color(depth_3d, new_depth_3d, depth_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
             #breakpoint()
             #new_depth_3d, new_depth_colors = trim_points(new_depth_3d, new_depth_colors, border=32)
             depth_3d, depth_colors = merge_and_filter(depth_3d, new_depth_3d, depth_colors, new_depth_colors)
