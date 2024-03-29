@@ -173,7 +173,6 @@ def main():
         proj_da = proj_da.long()
         proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
         proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
-        #image_t[proj_da[:, 1], proj_da[:, 0]] = vis_depth_colors
         image_t[proj_da[:, 1], proj_da[:, 0]] = (vis_depth_colors * 1.0).to(torch.uint8)
         wombo_img = image_t.clone().float() # only use existing points
 
@@ -190,8 +189,7 @@ def main():
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
             new_depth_3d, new_depth_colors, _ = img_to_pts_3d(pil_img)
             new_depth_3d = pts_cam_to_pts_world(new_depth_3d, extrinsics)
-            median_scale, new_depth_3d = project_and_scale_points_with_color(depth_3d, new_depth_3d, depth_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
-            #breakpoint()
+            _, new_depth_3d = project_and_scale_points_with_color(depth_3d, new_depth_3d, depth_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
             #new_depth_3d, new_depth_colors = trim_points(new_depth_3d, new_depth_colors, border=32)
             depth_3d, depth_colors = merge_and_filter(depth_3d, new_depth_3d, depth_colors, new_depth_colors)
 
