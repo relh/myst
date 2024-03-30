@@ -126,8 +126,12 @@ def main():
         # --- estimate depth ---
         if depth_3d is None: 
             pil_img = Image.fromarray(image.cpu().numpy())
-            depth_3d, depth_colors, focals = img_to_pts_3d(pil_img)
+            depth_3d, depth_colors, focals = img_to_pts_3d_dust(pil_img)
             depth_3d = pts_cam_to_pts_world(depth_3d, extrinsics)
+
+            #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
+            #da_3d = pts_cam_to_pts_world(da_3d, extrinsics)
+            #_, depth_3d = project_and_scale_points_with_color(da_3d, depth_3d, da_colors, depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
 
             if focals is not None:
                 intrinsics[0, 0] = focals
@@ -187,9 +191,16 @@ def main():
 
         if inpaint or infill:
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
-            new_depth_3d, new_depth_colors, _ = img_to_pts_3d(pil_img)
+
+            new_depth_3d, new_depth_colors, _ = img_to_pts_3d_dust(pil_img)
             new_depth_3d = pts_cam_to_pts_world(new_depth_3d, extrinsics)
+
+            #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)
+            #new_da_3d = pts_cam_to_pts_world(new_da_3d, extrinsics)
+
+            #_, new_depth_3d = project_and_scale_points_with_color(new_da_3d, new_depth_3d, new_da_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
             _, new_depth_3d = project_and_scale_points_with_color(depth_3d, new_depth_3d, depth_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
+
             #new_depth_3d, new_depth_colors = trim_points(new_depth_3d, new_depth_colors, border=32)
             depth_3d, depth_colors = merge_and_filter(depth_3d, new_depth_3d, depth_colors, new_depth_colors)
 

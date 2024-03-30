@@ -70,7 +70,7 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
 
     median = True
     if median:
-        diff_3d = gt_image[:, :, -1] / new_image[:, :, -1]
+        diff_3d = gt_image[:, :, :] / new_image[:, :, :]
         median = diff_3d[within_threshold].median()
         print(f'Median: {median}')
         new_3d_scaled = new_3d * median 
