@@ -3,7 +3,6 @@
 
 
 import math
-import pdb
 import random
 import sys
 
@@ -17,7 +16,6 @@ import scipy.ndimage
 import torch
 import torch.nn.functional as F
 import torch.utils.data
-from cupyx.profiler import benchmark
 from cupyx.scipy.ndimage import label
 from kornia.filters import spatial_gradient
 from kornia.geometry.epipolar import sampson_epipolar_distance
@@ -107,7 +105,7 @@ def make_obj_pred(handloc, output, segments, net, args, obj_bbox=None, size=None
         handloc[0] = min(handloc[0], args.embed_size[1]-1)
         handloc[1] = min(handloc[0], args.embed_size[0]-1)
         # compare handlocation to all other embeddings
-        flat_segments = einops.repeat(segments, 'h w -> (h w)')
+        einops.repeat(segments, 'h w -> (h w)')
         flat_all_embeds = einops.repeat(output, 'b c h w -> (h w) (c b)')
         tile_point = einops.repeat(output[:, :, handloc[1], handloc[0]], 'b c -> z (b c)', z=flat_all_embeds.shape[0])
         nm = net.module if args.ddp else net
@@ -360,7 +358,7 @@ def box_2_seg(output, segments, box, args):
     if box is not None and len(box) != 4:
         try:
             box = masks_to_boxes(einops.repeat(box, 'h w -> b h w', b=1)).int()[0]
-        except Exception as e:
+        except Exception:
             print(f'badbox -- {box}')
             box = [0, 0, segments.shape[0], segments.shape[1]]
     else:
@@ -452,7 +450,7 @@ def draw_box_on_mask(this_mask, box):
     if len(box) != 4:
         try:
             box = masks_to_boxes(einops.repeat(box, 'h w -> b h w', b=1)).int()[0]
-        except Exception as e:
+        except Exception:
             box = [0, 0, this_mask.shape[1]-1, this_mask.shape[0]-1]
 
     boxed_mask = this_mask.clone()
@@ -852,7 +850,7 @@ def d_embedding(flow):
     _flow = einops.repeat(flow.clone(), 'c h w -> b c h w', b=1)
     _sg_flow = spatial_gradient(_flow, normalized=False)
     _d_flow = einops.rearrange([_sg_flow[:, :, 0], _sg_flow[:, :, 1]], 's b c h w -> b (s c) h w')
-    _dd_flow = fft_integrate(_d_flow.float()).squeeze()
+    fft_integrate(_d_flow.float()).squeeze()
     return einops.rearrange(pca_image(fft_integrate(_d_flow.float()).squeeze()).float(), 'h w c -> c h w')
 
 

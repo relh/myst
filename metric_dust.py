@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import copy
-import os
 import sys
 
 import numpy as np
@@ -92,9 +91,9 @@ def img_to_pts_3d_dust(color_image):
     focals = None
     if get_focals:
         focals = scene.get_focals()[0]
-        poses = scene.get_im_poses()[0]
+        scene.get_im_poses()[0]
 
-    return torch.tensor(pts3d[0].reshape(-1, 3) * 500.0), \
+    return torch.tensor(pts3d[0].reshape(-1, 3) * 1000.0), \
            torch.tensor(np.asarray(color_image).reshape(-1, 3)).to('cuda'), focals
 
 

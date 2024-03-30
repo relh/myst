@@ -5,21 +5,15 @@ import json
 import logging
 import os
 import pdb
-import pickle
 import random
-import shutil
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import torch
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from torchvision.io import read_image
-
-from my_autoaugment import TrivialAugmentWide
 
 
 class Coherence_Dataset(Dataset):

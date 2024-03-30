@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import math
-import os
-import pdb
 import sys
 import time
 
@@ -13,15 +10,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data
 from cuml.cluster import HDBSCAN
-from cupyx.profiler import benchmark
-from kornia.geometry.ransac import RANSAC
-from torch import distributed as dist
-from torch import nn as nn
-from torch.cuda.amp import autocast
-from torch.profiler import ProfilerActivity, profile, record_function
-from models.segmentation_pytorch.configs.segformer_config import config as cfg
-from tqdm import tqdm
-
 from functions import (build_assoc_inputs, build_corr_grid, build_group_inputs,
                        build_rewarp_grid, calculate_average_embedding,
                        cleanse_component, connected_components,
@@ -30,6 +18,12 @@ from functions import (build_assoc_inputs, build_corr_grid, build_group_inputs,
                        get_pixel_groups, merge_component, rebase_components,
                        segment_embeddings, store_image)
 from inference import make_association_portable
+from kornia.geometry.ransac import RANSAC
+from models.segmentation_pytorch.configs.segformer_config import config as cfg
+from torch import distributed as dist
+from torch import nn as nn
+from torch.cuda.amp import autocast
+from tqdm import tqdm
 from write import write_index_html
 
 
@@ -422,7 +416,7 @@ def run_epoch(loader, net, scaler, optimizer, scheduler, epoch, args, is_train=T
 
                     # update learning schedule
                     scheduler.before_train_iter()
-                    lr = scheduler.get_lr(int(epoch_len+step), cfg.TRAIN.BASE_LR)
+                    scheduler.get_lr(int(epoch_len+step), cfg.TRAIN.BASE_LR)
             else:
                 scaler.step(optimizer)
                 scaler.update()

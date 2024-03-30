@@ -3,6 +3,7 @@
 
 import torch
 
+
 def project_to_image(camera_coords, intrinsics, image_shape):
     # Projects 3D points onto a 2D image plane using the camera's extrinsic and intrinsic matrices.
     proj_pts = intrinsics @ camera_coords[:3, :]

@@ -2,17 +2,14 @@
 # -*- coding: utf-8 -*-
 import json
 from pathlib import Path
-from typing import Optional
 
 import hydra
-import numpy as np
-import svg
 import torch
-from einops import einsum, rearrange, reduce, repeat
+from einops import einsum, rearrange, repeat
 from jaxtyping import Float, install_import_hook
 from lightning_fabric.utilities.apply_func import apply_to_collection
 from PIL import Image
-from pytorch3d.transforms import Rotate, Translate, quaternion_to_matrix
+from pytorch3d.transforms import quaternion_to_matrix
 from scipy.spatial.transform import Rotation as R
 from torch import Tensor
 from torch.utils.data import Dataset, default_collate
@@ -24,30 +21,19 @@ with install_import_hook(
     ("beartype", "beartype"),
 ):
     from src.config import load_typed_root_config
-    from src.dataset import get_dataset
     from src.dataset.dataset_re10k import DatasetRE10k, DatasetRE10kCfg
-    from src.dataset.types import Stage
     from src.dataset.view_sampler import get_view_sampler
-    from src.dataset.view_sampler.view_sampler_arbitrary import \
-        ViewSamplerArbitraryCfg
     from src.geometry.projection import homogenize_points, project
     from src.global_cfg import set_cfg
     from src.misc.image_io import save_image
-    from src.misc.step_tracker import StepTracker
-    from src.misc.wandb_tools import update_checkpoint_path
     from src.model.decoder import get_decoder
     from src.model.decoder.cuda_splatting import render_cuda_orthographic
-    from src.model.encoder import (Encoder, EncoderEpipolar,
-                                   EncoderEpipolarCfg, get_encoder)
-    from src.model.encoder.visualization.encoder_visualizer import \
-        EncoderVisualizer
+    from src.model.encoder import EncoderEpipolar, EncoderEpipolarCfg
     from src.model.encoder.visualization.encoder_visualizer_epipolar import \
         EncoderVisualizerEpipolar
     from src.model.model_wrapper import ModelWrapper
     from src.model.ply_export import export_ply
-    from src.paper.common import encode_image, save_svg
     from src.visualization.color_map import apply_color_map_to_image
-    from src.visualization.colors import get_distinct_color
     from src.visualization.drawing.cameras import unproject_frustum_corners
     from src.visualization.drawing.lines import draw_lines
     from src.visualization.drawing.points import draw_points

@@ -11,12 +11,10 @@ import getpass
 import glob
 import json
 import os
-import pdb
 import pickle
 import random
 import socket
 import sys
-import time
 import traceback
 import warnings
 from pathlib import Path
@@ -26,19 +24,19 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn as nn
+from cohesiv import COHESIV
 from mmcv.runner import build_optimizer
+from models import resnet
+from models.N3F.feature_extractor.lib.baselines import get_model
+from models.segmentation_pytorch.configs.segformer_config import config as cfg
+from models.segmentation_pytorch.utils.lr_schedule import PolyLrUpdater
+from simseg import SimSeg
 from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler
 
-from cohesiv import COHESIV
 from dataset import Coherence_Dataset
-from models import resnet
-from models.N3F.feature_extractor.lib.baselines import DINO, get_model
-from models.segmentation_pytorch.configs.segformer_config import config as cfg
-from models.segmentation_pytorch.utils.lr_schedule import PolyLrUpdater
-from simseg import SimSeg
 
 warnings.filterwarnings("ignore")
 random.seed(30)
@@ -341,7 +339,7 @@ def setup(rank, args):
             if args.cohesiv:
                 from calibrate import cohesiv_calibrate 
                 print('calibration cohesiv..')
-                association_threshold = cohesiv_calibrate(train_annotations, net, args, args.experiment_path + f'evaluation/{args.dataset}/')
+                cohesiv_calibrate(train_annotations, net, args, args.experiment_path + f'evaluation/{args.dataset}/')
             if args.visor:
                 from calibrate import visor_calibrate 
                 print('calibration visor..')
@@ -391,7 +389,6 @@ def setup(rank, args):
 
         # --- make figures ---
         if args.inference: 
-            from inference import make_figure 
             print('inference..')
             from cuml.cluster import HDBSCAN
             clust = HDBSCAN(min_samples=args.cluster_min_samples, min_cluster_size=args.cluster_min_size)#, cluster_selection_method='leaf')

@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from diffusers import StableDiffusionControlNetInpaintPipeline, ControlNetModel, DPMSolverMultistepScheduler
-from diffusers.utils import load_image
 import numpy as np
 import torch
-from PIL import Image
+from diffusers import (ControlNetModel, DPMSolverMultistepScheduler,
+                       StableDiffusionControlNetInpaintPipeline)
 
 # Assuming these imports are done and necessary packages are installed
 

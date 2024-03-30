@@ -7,28 +7,19 @@ import torch
 
 torch.backends.cuda.preferred_linalg_library()
 
-import os
-import re
 from argparse import ArgumentParser
 from pathlib import Path
 
-import cv2
 import numpy as np
-import replicate
 import rerun as rr  # pip install rerun-sdk
 import torch
 import torch.nn.functional as F
-from diffusers import AutoPipelineForInpainting, StableDiffusionInpaintPipeline
 from PIL import Image
-from torchvision.transforms import ToPILImage, ToTensor
 from transformers import pipeline
+from utils import *
 
 from ek_fields_utils.colmap_rw_utils import read_model
 from misc.colab import run_inpainting_pipeline
-from misc.control import generate_outpainted_image
-from misc.outpainting import run
-from misc.replicate_me import run_replicate_with_pil
-from utils import *
 
 
 def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, resize: tuple[int, int] | None) -> None:

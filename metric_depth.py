@@ -1,32 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import argparse
-import collections
-import glob
-import os
-import struct
 import sys
-from pathlib import Path
-from typing import Mapping
 
-import kornia
-import matplotlib.pyplot as plt
 import numpy as np
-import open3d as o3d
 import rerun as rr  # pip install rerun-sdk
 import torch
-import torch.nn.functional as F
 import torchvision.transforms as transforms
-from decord import VideoReader
-from einops import rearrange, repeat
-from imageio import get_writer
-from matplotlib import pyplot as plt
-from PIL import Image, ImageOps
-from scipy.spatial.transform import Rotation as R
-from torchvision.transforms import ToTensor
-from tqdm import tqdm
-from transformers import pipeline
+from PIL import Image
 
 sys.path.append('depth_anything/metric_depth/')
 from depth_anything.metric_depth.zoedepth.models.builder import build_model
@@ -84,37 +65,6 @@ def img_to_pts_3d_da(color_image):
     colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
     colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
     return points_camera_coord_tensor, colors, None
-
-
-def pts_3d_to_img(points_3d, colors, intrinsics, extrinsics, image_shape, this_mask=None):
-    points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
-    camera_coords = extrinsics @ points_homogeneous
-    proj_pts = intrinsics @ camera_coords[:3, :]
-    im_proj_pts = proj_pts[:2] / proj_pts[2]
-
-    # build depth map
-    x_pixels = torch.round(im_proj_pts[0, :]).long()
-    y_pixels = torch.round(im_proj_pts[1, :]).long()
-    visible = (camera_coords[2] > 0) & (im_proj_pts[0] >= 0) & (im_proj_pts[1] >= 0) & \
-          (x_pixels < image_shape[1]) & (y_pixels < image_shape[0]) 
-
-    # screen out invisible and index for hand-obj occlusion
-    x_pixels = x_pixels[visible]
-    y_pixels = y_pixels[visible]
-    proj_pts = proj_pts[:, visible]
-    im_proj_pts = im_proj_pts[:, visible]
-
-    if this_mask == None: this_mask = torch.zeros((512, 512), device=points_3d.device)
-    unocc = this_mask[y_pixels, x_pixels] == 0
-    #occ = this_mask[y_pixels, x_pixels] == 1
-
-    depth_map = torch.full(image_shape, float('inf'), device=points_3d.device)
-    depth_map[y_pixels[unocc], x_pixels[unocc]] = torch.min(depth_map[y_pixels[unocc], x_pixels[unocc]], proj_pts[2][unocc])
-    depth_map[depth_map == float('inf')] = 0
-
-    return im_proj_pts.T[unocc][:, :2], \
-           points_3d[visible][unocc], \
-           (None if colors is None else colors[visible][unocc])
 
 
 if __name__ == '__main__':

@@ -7,33 +7,20 @@ import torch
 
 torch.backends.cuda.preferred_linalg_library()
 
-import os
-import re
 import sys
 import termios
 import tty
 from argparse import ArgumentParser
-from pathlib import Path
 
-import cv2
-import numpy as np
-import replicate
 import rerun as rr  # pip install rerun-sdk
 import torch
-import torch.nn.functional as F
-from diffusers import AutoPipelineForInpainting, StableDiffusionInpaintPipeline
 from PIL import Image
-from pytorch3d.transforms import matrix_to_quaternion
-from torchvision.transforms import ToPILImage, ToTensor
 
-from ek_fields_utils.colmap_rw_utils import read_model
-from metric_depth import img_to_pts_3d_da, pts_3d_to_img, pts_cam_to_pts_world
+from metric_depth import img_to_pts_3d_da, pts_cam_to_pts_world
 from metric_dust import img_to_pts_3d_dust
-from misc.control import generate_outpainted_image
 from misc.inpaint import run_inpaint
 from misc.merge import *
-from misc.outpainting import run
-from misc.replicate_me import run_replicate_with_pil
+from misc.renderer import *
 from misc.scale import *
 from misc.utils import *
 
@@ -98,7 +85,6 @@ def main():
     image = None
     mask = None
     extrinsics = None
-    visualization = False
     intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
                                [0.0000, 256.0*1.0, 256.0000],
                                [0.0000, 0.000, 1.0000]]).cuda()
@@ -172,13 +158,7 @@ def main():
             inpaint = True
 
         # --- turn 3d points to image ---
-        proj_da, vis_depth_3d, vis_depth_colors = pts_3d_to_img(depth_3d, depth_colors, intrinsics, extrinsics, (512, 512))
-        image_t = torch.zeros((512, 512, 3), dtype=torch.uint8).cuda()
-        proj_da = proj_da.long()
-        proj_da[:, 0] = proj_da[:, 0].clamp(0, 512 - 1)
-        proj_da[:, 1] = proj_da[:, 1].clamp(0, 512 - 1)
-        image_t[proj_da[:, 1], proj_da[:, 0]] = (vis_depth_colors * 1.0).to(torch.uint8)
-        wombo_img = image_t.clone().float() # only use existing points
+        wombo_img = pts_3d_to_img_pulsar(depth_3d, depth_colors, intrinsics, extrinsics, (512, 512))
 
         # --- sideways pipeline ---
         if inpaint: 

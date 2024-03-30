@@ -4,55 +4,24 @@ import os
 
 os.environ['DECORD_EOF_RETRY_MAX'] = str(20480)
 
-import nevergrad as ng
-import gc
-import getopt
-import glob
-import json
-import math
 import os
-import pdb
 import pickle
 import random
-import shutil
 import sys
-import time
-from argparse import ArgumentParser
-from collections import defaultdict
 
-import albumentations as albu
 import cv2
-import decord as de
 import einops
-import gflags
 import numpy
 import numpy as np
-import PIL
-import PIL.Image
 import scipy
-import scipy.io as sio
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.data
-from cuml.cluster import HDBSCAN
-from cupyx.profiler import benchmark
-from decord import VideoLoader, VideoReader, cpu, gpu
-from iglovikov_helper_functions.dl.pytorch.utils import tensor_from_rgb_image
-from iglovikov_helper_functions.utils.image_utils import pad
-from kornia.geometry.ransac import RANSAC
-from PIL import Image
-from torch import distributed as dist
-from torch import nn as nn
-from torch.cuda.amp import autocast
-from torch.profiler import ProfilerActivity, profile, record_function
-from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler
-from torchvision.ops import masks_to_boxes
-from tqdm import tqdm
-
 import seeem
-from dataset import Coherence_Dataset, MiniDataset
+import torch
+import torch.utils.data
 from functions import *
+from kornia.geometry.ransac import RANSAC
+from torch.utils.data import DataLoader
+
+from dataset import Coherence_Dataset
 
 random.seed(0)
 inv_normalize = transforms.Normalize(mean=[-0.485 / 0.229, -0.456 / 0.224, -0.406 / 0.225], std=[1 / 0.229, 1 / 0.224, 1 / 0.225])

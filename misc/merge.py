@@ -95,7 +95,7 @@ def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=None):
 
     # Find unique new keys
     unique_vals, unique_inverse = torch.unique(all_new_keys, return_inverse=True, dim=0)
-    unique_counts = torch.bincount(unique_inverse)
+    torch.bincount(unique_inverse)
 
     # Identify first occurrences of unique keys as valid, plus all from original
     valid_new_indices = unique_inverse[len(da_3d):] < len(da_3d) + torch.arange(len(new_da_3d_filtered)).to(da_3d.device)

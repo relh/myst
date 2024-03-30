@@ -9,15 +9,11 @@
 # The GitHub recommends a denoising strength of 0.6  and config scale of 10.
 # I've found a bit higher values for the denoising strength to work better, ymmv
 
-import argparse
 import os
-import sys
 
 import numpy as np
 import PIL
 import skimage
-from PIL import Image
-from skimage import exposure, filters
 
 DEFAULT_RESOLUTION = (512, 512)
 MAX_RESOLUTION = (768, 768)

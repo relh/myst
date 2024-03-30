@@ -5,10 +5,7 @@ import os
 os.environ['DECORD_EOF_RETRY_MAX'] = str(20480)
 
 import gc
-import getopt
-import glob
 import json
-import math
 import os
 import pdb
 import pickle
@@ -21,26 +18,22 @@ from collections import defaultdict
 
 import albumentations as albu
 import cv2
-import decord as de
 import einops
-import gflags
 import numpy
 import numpy as np
 import PIL
 import PIL.Image
-import scipy.io as sio
 #import tensorflow as tf
 import torch
 import torch.nn.functional as F
-from decord import VideoLoader, VideoReader, cpu, gpu
+from decord import VideoReader, gpu
 from iglovikov_helper_functions.dl.pytorch.utils import tensor_from_rgb_image
 from iglovikov_helper_functions.utils.image_utils import pad
 #from keras.utils.generic_utils import Progbar
 from mmflow.apis import inference_model, init_model
 from people_segmentation.pre_trained_models import create_model
 from PIL import Image
-from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler
-from torchvision.ops import masks_to_boxes
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from dataset import MiniDataset
@@ -95,7 +88,7 @@ def frames_and_people(videos, split='val'):
     model.eval()
     size = (576, 1024) if dataset == 'epickitchens' else (648, 864) 
 
-    metadata = json.load(open(f'/home/relh/annotated_ego4d/ego4d.json'))
+    json.load(open(f'/home/relh/annotated_ego4d/ego4d.json'))
 
     fho_hands = json.load(open(f'/home/relh/annotated_ego4d/fho_hands_{split}.json'))
     fho_scod = json.load(open(f'/home/relh/annotated_ego4d/fho_scod_{split}.json'))
@@ -272,7 +265,7 @@ def filter_cache(offset=10):
         person, video, now_frame_num = frame.split('_')
         name = '_'.join([person, video])
         future_frame_num = str(int(now_frame_num) + offset)
-        future_frame = '_'.join([name, str(future_frame_num)])
+        '_'.join([name, str(future_frame_num)])
 
         if old_frame_num is not None:
             if person == old_person and video == old_video:
@@ -308,8 +301,8 @@ def refine_cache(offset=10):
         future_frame_num = str(int(now_frame_num) + offset)
         future_frame = '_'.join([name, str(future_frame_num)])
 
-        now_frame_path = (frame_path + name + '/' + frame + '.png')
-        future_frame_path = (frame_path + name + '/' + future_frame + '.png')
+        (frame_path + name + '/' + frame + '.png')
+        (frame_path + name + '/' + future_frame + '.png')
         # TODO check for cycle inconsistency
 
         new_filtered_paired_frames.append(frame)
@@ -333,7 +326,7 @@ def merge_cache(offset=10):
         person, video, now_frame_num = frame.split('_')
         name = '_'.join([person, video])
         future_frame_num = str(int(now_frame_num) + 3*offset)
-        future_frame = '_'.join([name, str(future_frame_num)])
+        '_'.join([name, str(future_frame_num)])
 
         one_frame = one_filtered_paired_frames[i + special_counter]
         one_person, one_video, one_frame_num = one_frame.split('_')
@@ -369,9 +362,6 @@ def pseudolabel(paired_frames, offset=30, neg=False, pwc=False):
     sys.path.append("./labelling/unsupervised_detection/")
     from common_flags import FLAGS
     from my_models.adversarial_learner import AdversarialLearner
-    from my_models.utils.general_utils import (compute_boundary_score,
-                                               postprocess_image,
-                                               postprocess_mask)
     argv = sys.argv
     argv = FLAGS(argv)  # parse flags
     FLAGS.img_width = '1024'
@@ -401,7 +391,6 @@ def pseudolabel(paired_frames, offset=30, neg=False, pwc=False):
 
         progbar = Progbar(target=n_steps)
 
-        i = 0
 
         for step in range(n_steps):
             #if sv.should_stop():
@@ -417,7 +406,7 @@ def pseudolabel(paired_frames, offset=30, neg=False, pwc=False):
                 # select mask
                 generated_mask = inference['gen_masks'][batch_num]
                 gt_mask = inference['gt_masks'][batch_num]
-                category = inference['img_fname'][batch_num].decode("utf-8").split('/')[-2]
+                inference['img_fname'][batch_num].decode("utf-8").split('/')[-2]
 
                 iou, out_mask = compute_IoU(gt_mask=gt_mask, pred_mask_f=generated_mask)
                 pdb.set_trace()
@@ -483,10 +472,9 @@ def flow(paired_frames, offset=30, neg=False, pwc=False):
                 print(f'{i} / {len(paired_frames)}.. {(i / len(paired_frames)) * 100.0} {rgb_future_flow_file}')
                 if os.path.exists(rgb_future_flow_file): 
                     try:
-                        abc = np.load(rgb_future_flow_file)['arr_0']
+                        np.load(rgb_future_flow_file)['arr_0']
                     except:
                         continue # and 'P01_102' not in rgb_future_flow_file: continue
-                        pass
 
                 if not pwc:
                     rgb_now_frame = cv2.imread(frame_path + name + '/' + now_frame + '.png')
@@ -515,10 +503,9 @@ def flow(paired_frames, offset=30, neg=False, pwc=False):
                 print(f'{i} / {len(paired_frames)}.. {(i / len(paired_frames)) * 100.0} {rgb_now_flow_file}')
                 if os.path.exists(rgb_now_flow_file):
                     try:
-                        abc = np.load(rgb_now_flow_file)['arr_0']
+                        np.load(rgb_now_flow_file)['arr_0']
                     except:
                         continue # and 'P01_102' not in rgb_future_flow_file: continue
-                        pass
 
                 if not pwc:
                     rgb_now_frame = cv2.imread(frame_path + name + '/' + now_frame + '.png')
@@ -664,7 +651,7 @@ def remove_broken_frames(dataset):
 def find_mini_paired(videos, offset=10, split='val'):
     my_gpu = int(os.environ["CUDA_VISIBLE_DEVICES"])
 
-    metadata = json.load(open(f'/home/relh/annotated_ego4d/ego4d.json'))
+    json.load(open(f'/home/relh/annotated_ego4d/ego4d.json'))
 
     fho_hands = json.load(open(f'/home/relh/annotated_ego4d/fho_hands_{split}.json'))
     fho_scod = json.load(open(f'/home/relh/annotated_ego4d/fho_scod_{split}.json'))
@@ -721,7 +708,7 @@ def find_mini_paired(videos, offset=10, split='val'):
         print(f'to_process: {len(to_process)}')
 
         v = vvv['video_uid']
-        this_video_path = vvv['video_uid'] + '.mp4' 
+        vvv['video_uid'] + '.mp4' 
 
         for index in to_process:
             mini_paired_frames.append(v + '_' + str(index))
@@ -807,7 +794,7 @@ def build_ego4d_images(split='train'):
         print(f'to_process: {len(to_process)}')
 
         v = vvv['video_uid']
-        this_video_path = vvv['video_uid'] + '.mp4' 
+        vvv['video_uid'] + '.mp4' 
 
         mini_paired_frames = []
         for index in to_process:
@@ -837,21 +824,20 @@ def build_ego4d_images(split='train'):
 
 def process_fho_seg(frame):
     to_process = frame['frame']
-    boxes = frame['boxes']
+    frame['boxes']
     return to_process
 
 def build_annotated_frame_cache(split='train'):
     metadata = json.load(open(f'/home/relh/annotated_ego4d/ego4d.json'))
     videos = list([x for x in metadata['videos']])# if x['split_fho'] == 'val'])# or x['split_fho'] == 'multi'])
 
-    fho_hands = json.load(open(f'/home/relh/annotated_ego4d/fho_hands_{split}.json'))
+    json.load(open(f'/home/relh/annotated_ego4d/fho_hands_{split}.json'))
     fho_scod = json.load(open(f'/home/relh/annotated_ego4d/fho_scod_{split}.json'))
     fho_sta = json.load(open(f'/home/relh/annotated_ego4d/fho_sta_{split}.json'))
 
     my_videos = list(videos)
-    new_frame_path = f'/home/relh/VISOR-HOS/datasets/ego4d_box2seg/{split}/'
+    f'/home/relh/VISOR-HOS/datasets/ego4d_box2seg/{split}/'
 
-    full_paired_frames = []
     annotations = defaultdict(list)
     for zzz, vvv in enumerate(tqdm(my_videos)):
         # want to find all the frames and their offset pairs we may care about
@@ -1149,7 +1135,6 @@ def build_ego4d_val_json(root_path, split='val'):
         ego4d_labels += [my_path + x.replace('.jpg', '.png') for x in image_names if 'ego4d' in x]
         new_paths += ['/home/relh/VISOR-HOS/datasets/ego4d_eval/val/' + x for x in image_names if 'ego4d' in x]
 
-    jjj = 0 
     for iii, (source_image, target_image, annotation) in enumerate(zip(ego4d_images, new_paths, ego4d_labels)):
         print(f'{iii} / {len(ego4d_labels)}')
         image_name = source_image.split('/')[-1].split('.')[0]

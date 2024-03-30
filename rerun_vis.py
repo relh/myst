@@ -10,7 +10,6 @@ import os
 import re
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import Final
 
 import cv2
 import numpy as np
@@ -19,9 +18,9 @@ import rerun as rr  # pip install rerun-sdk
 import torch.nn.functional as F
 from PIL import Image
 from transformers import pipeline
+from utils import *
 
 from ek_fields_utils.colmap_rw_utils import Camera, read_model
-from utils import *
 
 
 def scale_camera(camera: Camera, resize: tuple[int, int]) -> tuple[Camera, npt.NDArray[np.float_]]:

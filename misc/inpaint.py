@@ -2,21 +2,15 @@
 import math
 import random
 
-import einops
-import matplotlib.pyplot as plt
 import numpy as np
 import PIL
 import torch
 import torch.nn.functional as F
-from diffusers import (AutoPipelineForInpainting, DPMSolverMultistepScheduler,
-                       StableDiffusionPipeline,
-                       StableDiffusionXLInpaintPipeline)
+from diffusers import AutoPipelineForInpainting
 from einops import rearrange, repeat
-from kornia.geometry.transform import (get_affine_matrix2d,
-                                       get_rotation_matrix2d, warp_affine)
+from kornia.geometry.transform import get_affine_matrix2d, warp_affine
 from PIL import Image
-from torchvision.transforms import ToPILImage, ToTensor
-from torchvision.transforms.functional import pad, to_pil_image
+from torchvision.transforms.functional import pad
 
 #torch.set_default_dtype(torch.float32)
 #torch.set_default_device('cuda')

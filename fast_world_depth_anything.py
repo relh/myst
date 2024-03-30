@@ -15,8 +15,9 @@ from transformers import pipeline
 torch.set_default_dtype(torch.float32)
 torch.set_default_device('cuda')
 
-from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 from utils import *
+
+from ek_fields_utils.colmap_rw_utils import read_model, sort_images
 
 
 def get_3D_coordinates(depth, extrinsics):

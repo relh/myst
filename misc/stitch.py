@@ -1,30 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from matplotlib import pyplot as plt
 import json
-from pathlib import Path
-from typing import Optional
 
 import cv2
-import hydra
 import kornia
 import numpy as np
-import pytorch3d
 import rerun as rr  # NOTE: `rerun`, not `rerun-sdk`!
-import svg
 import torch
-from einops import einsum, rearrange, reduce, repeat
-from jaxtyping import Float, install_import_hook
-from lightning_fabric.utilities.apply_func import apply_to_collection
+from matplotlib import pyplot as plt
 from PIL import Image
 from pytorch3d.ops import iterative_closest_point
 from pytorch3d.structures import Pointclouds
-from pytorch3d.transforms import (Rotate, Transform3d, Translate,
-                                  quaternion_to_matrix)
-from scipy.spatial.transform import Rotation as R
-from stitching import Stitcher
-from torch import Tensor
-from torch.utils.data import Dataset, default_collate
+from pytorch3d.transforms import Transform3d, quaternion_to_matrix
 from torchvision import transforms
 
 

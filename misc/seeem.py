@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import pdb
-import sys
 from collections import defaultdict
 
 import cv2
