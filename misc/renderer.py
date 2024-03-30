@@ -66,9 +66,7 @@ def pts_3d_to_img_pulsar(points_3d, colors, intrinsics, extrinsics, image_shape)
     
     # Convert the rendered image to the expected format
     image_rgba = images[0, ..., :3]  # Extract RGB values
-    image_rgb = image_rgba.cpu().numpy()  # Assuming numpy array is needed
-
-    return image_rgb
+    return image_rgba
 
 def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape):
     points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T

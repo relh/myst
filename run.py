@@ -76,7 +76,7 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='raster', help='raster / pulsar')
+    parser.add_argument('--renderer', type=str, default='pulsar', help='raster / pulsar')
     args = parser.parse_args()
     rr.script_setup(args, "13myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
@@ -101,7 +101,7 @@ def main():
             image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
             mask = torch.ones(512, 512)
         else:
-            image = wombo_img.to(torch.uint8)
+            image = torch.tensor(wombo_img).to(torch.uint8)
             mask = image.sum(dim=2) < 10
 
         # --- establish orientation ---
@@ -164,7 +164,7 @@ def main():
 
         # --- sideways pipeline ---
         if inpaint: 
-            wombo_img = fill(image_t)      # blur points to make a smooth image
+            wombo_img = fill(wombo_img)      # blur points to make a smooth image
             mask = wombo_img.sum(dim=2) < 10
             wombo_img[mask] = -1.0
             sq_init = run_inpaint(wombo_img, mask.float(), prompt=prompt)
