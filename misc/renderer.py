@@ -27,17 +27,26 @@ model = None
 def pts_3d_to_img_pulsar(points_3d, colors, intrinsics, extrinsics, image_shape):
     device = points_3d.device
     
-    # Convert extrinsics to camera position in world coordinates
-    R = extrinsics[:3, :3].T  # Transpose to invert rotation
-    T = -R @ extrinsics[:3, 3]
+    # Ensure extrinsics is a tensor and move it to the correct device
+    extrinsics = torch.tensor(extrinsics, dtype=torch.float32, device=device)
     
-    # Since focal_length is not directly accepted, we might need to compute FOV
-    # If your application requires exact intrinsics handling, this would need adjusting
-    # For simplicity, let's use default FoV and assume principal point is at the center
-    cameras = FoVPerspectiveCameras(device=device, R=[R], T=[T.unsqueeze(0)])
+    # Invert the rotation and translation from world to camera space
+    R = extrinsics[:3, :3].transpose(0, 1)  # Transpose rotation to invert it
+    T = torch.matmul(-R, extrinsics[:3, 3])  # Compute the inverse translation without adding an extra dimension
+    
+    # Correctly reshape R and T for FoVPerspectiveCameras
+    R = R.unsqueeze(0)  # Add batch dimension to R
+    T = T.unsqueeze(0)  # Add batch dimension to T to make its shape (1, 3)
+    
+    # Initialize the camera with the corrected R and T tensors
+    cameras = FoVPerspectiveCameras(device=device, R=R, T=T)
+    
+    # Prepare the point cloud and colors
+    points_3d = torch.tensor(points_3d, dtype=torch.float32, device=device)
+    colors = torch.tensor(colors, dtype=torch.float32, device=device) / 255.0  # Normalize colors
     
     # Create a point cloud object
-    point_cloud = Pointclouds(points=[points_3d], features=[colors.to(torch.float32) / 255.0])  # Normalize colors
+    point_cloud = Pointclouds(points=[points_3d], features=[colors])
     
     # Define rasterization settings
     raster_settings = PointsRasterizationSettings(
@@ -61,8 +70,7 @@ def pts_3d_to_img_pulsar(points_3d, colors, intrinsics, extrinsics, image_shape)
 
     return image_rgb
 
-
-def pts_3d_to_img(points_3d, colors, intrinsics, extrinsics, image_shape):
+def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape):
     points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
     camera_coords = extrinsics @ points_homogeneous
     proj_pts = intrinsics @ camera_coords[:3, :]

@@ -76,11 +76,13 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
+    parser.add_argument('--renderer', type=str, default='raster', help='raster / pulsar')
     args = parser.parse_args()
     rr.script_setup(args, "13myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
+    pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_pulsar 
     depth_3d = None
     image = None
     mask = None
@@ -158,7 +160,7 @@ def main():
             inpaint = True
 
         # --- turn 3d points to image ---
-        wombo_img = pts_3d_to_img_pulsar(depth_3d, depth_colors, intrinsics, extrinsics, (512, 512))
+        wombo_img = pts_3d_to_img(depth_3d, depth_colors, intrinsics, extrinsics, (512, 512))
 
         # --- sideways pipeline ---
         if inpaint: 
