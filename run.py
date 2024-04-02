@@ -76,13 +76,13 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='pulsar', help='raster / pulsar')
+    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     args = parser.parse_args()
     rr.script_setup(args, "13myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
-    pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'pulsar' else pts_3d_to_img_pulsar 
+    pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
     depth_3d = None
     image = None
@@ -104,6 +104,7 @@ def main():
         else:
             image = torch.tensor(wombo_img).to(torch.uint8)
             mask = image.sum(dim=2) < 10
+            image[mask] = 0.0
 
         # --- establish orientation ---
         if extrinsics == None:
@@ -125,7 +126,7 @@ def main():
             if focals is not None:
                 intrinsics[0, 0] = focals
                 intrinsics[1, 1] = focals
-            renderer = Renderer(config={'device': 'cuda', 'init_focal_length': intrinsics[0,0], 'blur_radius': 5.0})
+                print(intrinsics)
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -133,9 +134,10 @@ def main():
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
                            mat3x3=extrinsics[:3, :3].cpu().numpy(), from_parent=True))
-        rr.log("world/camera/image",rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
+        inpy = intrinsics.cpu().numpy()
+        rr.log("world/camera/image", rr.Pinhole(resolution=[512., 512.], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
-        rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[256., 256.], principal_point=[256., 256.]))
+        rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
         # --- get user input ---
