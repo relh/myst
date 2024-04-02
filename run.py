@@ -98,7 +98,7 @@ def main():
         # --- setup initial scene ---
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
-            prompt = 'a high-resolution photo of a large kitchen'
+            prompt = 'a high-resolution photo of a large kitchen.'
             image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
             mask = torch.ones(512, 512)
         else:
@@ -184,10 +184,13 @@ def main():
             #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)
             #new_da_3d = pts_cam_to_pts_world(new_da_3d, extrinsics)
 
+            # this re-aligns two point clouds with partial overlap
             #_, new_depth_3d = project_and_scale_points_with_color(new_da_3d, new_depth_3d, new_da_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
             _, new_depth_3d = project_and_scale_points_with_color(depth_3d, new_depth_3d, depth_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
 
+            # this trims the edges of estimate points incase depth is bad
             #new_depth_3d, new_depth_colors = trim_points(new_depth_3d, new_depth_colors, border=32)
+
             depth_3d, depth_colors = merge_and_filter(depth_3d, new_depth_3d, depth_colors, new_depth_colors)
 
     rr.script_teardown(args)
