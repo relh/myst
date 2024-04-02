@@ -82,7 +82,8 @@ def main():
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
-    pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_pulsar 
+    pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'pulsar' else pts_3d_to_img_pulsar 
+
     depth_3d = None
     image = None
     mask = None
@@ -124,6 +125,7 @@ def main():
             if focals is not None:
                 intrinsics[0, 0] = focals
                 intrinsics[1, 1] = focals
+            renderer = Renderer(config={'device': 'cuda', 'init_focal_length': intrinsics[0,0], 'blur_radius': 5.0})
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
