@@ -1,7 +1,7 @@
 import torch
 import kornia as kn
 
-def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, num_pixels=5):
+def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, num_pixels=10):
     H, W = 512, 512
 
     pts_3d = pts_3d.reshape((H, W, 3))
@@ -42,10 +42,6 @@ def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, n
     for i in range(1, num_pixels + 1):
         new_x = torch.clamp(edge_coords[1] + i * dx, 0, W - 1)
         new_y = torch.clamp(edge_coords[0] + i * dy, 0, H - 1)
-
-        # Ensure we index valid positions only
-        #valid_indices = (new_x >= 0) & (new_x < W) & (new_y >= 0) & (new_y < H)
-        #output_mask[new_y[valid_indices], new_x[valid_indices]] = 1
 
         #new_depth = og_depth_map.squeeze()[new_y, new_x].float()
         new_color = rgb_image.squeeze()[new_y, new_x].float()

@@ -79,7 +79,7 @@ def main():
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     args = parser.parse_args()
-    rr.script_setup(args, "14myst")
+    rr.script_setup(args, "15myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
@@ -118,7 +118,7 @@ def main():
         if pts_3d is None: 
             pil_img = Image.fromarray(image.cpu().numpy())
             pts_3d, rgb_3d, focals = img_to_pts_3d_dust(pil_img)
-            pts_3d, _ = realign_depth_edges(pts_3d, rgb_3d)
+            pts_3d, mask_3d = realign_depth_edges(pts_3d, rgb_3d)
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
 
             #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
@@ -140,7 +140,7 @@ def main():
         rr.log("world/camera/image", rr.Pinhole(resolution=[512., 512.], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
         rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
-        rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
+        rr.log("world/camera/mask", rr.Image((torch.stack([mask_3d, mask_3d, mask_3d], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
         # --- get user input ---
         infill = False
@@ -181,7 +181,7 @@ def main():
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
 
             new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(pil_img)
-            new_pts_3d, _ = realign_depth_edges(new_pts_3d, new_rgb_3d)
+            new_pts_3d, mask_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
 
             #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)
@@ -189,7 +189,7 @@ def main():
 
             # this re-aligns two point clouds with partial overlap
             #_, new_pts_3d = project_and_scale_points_with_color(new_da_3d, new_pts_3d, new_da_colors, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
-            _, new_pts_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
+            _, new_pts_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
 
             # this trims the edges of estimate points incase depth is bad
             #new_pts_3d, new_rgb_3d = trim_points(new_pts_3d, new_rgb_3d, border=32)
