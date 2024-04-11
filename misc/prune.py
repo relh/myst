@@ -1,13 +1,14 @@
 import torch
 import kornia as kn
 
-def detect_edges_and_color_directionally(depth_map, low_threshold=0.3, high_threshold=0.3, num_pixels=4):
+def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, num_pixels=4):
     """
     Detects edges using Canny edge detector, calculates gradient directions, 
     and colors additional pixels in the direction of the gradient on a depth map.
     
     Args:
     - depth_map (Tensor): Depth image tensor of shape ((H*W), 3).
+    - rgb_image (Tensor): RGB image tensor of shape ((H*W), 3).
     - low_threshold (float): Lower threshold for hysteresis in Canny edge detection.
     - high_threshold (float): Upper threshold for hysteresis in Canny edge detection.
     - num_pixels (int): Number of pixels to color in the direction of the edge.
@@ -17,8 +18,12 @@ def detect_edges_and_color_directionally(depth_map, low_threshold=0.3, high_thre
     """
 
     # Assuming depth_map needs reshaping and normalization
-    depth_map = depth_map.reshape((512, 512, 3))[:, :, -1].unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, H, W)
+    pts_3d = pts_3d.reshape((512, 512, 3))
+    depth_map = pts_3d.clone()[:, :, -1].unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, H, W)
+    og_depth_map = depth_map.clone().float()
     depth_map = depth_map.float() / 255.0  # Normalize assuming the depth values are in [0, 255]
+
+    rgb_image = rgb_3d.reshape((512, 512, 3)).unsqueeze(0) # Shape: (1, 3, H, W)
 
     # Apply Canny edge detector
     _, edges = kn.filters.canny(depth_map, low_threshold, high_threshold)
@@ -38,16 +43,34 @@ def detect_edges_and_color_directionally(depth_map, low_threshold=0.3, high_thre
     dy = torch.round(torch.sin(grad_direction[edge_coords])).to(torch.long)
 
     # Prepare the output mask
-    output_mask = edges.squeeze().clone()  # Shape: (H, W)
+    #output_mask = edges.squeeze().clone()  # Shape: (H, W)
+    H, W = edges.squeeze().clone().shape
+
+    og_x = torch.clamp(edge_coords[1], 0, W - 1)
+    og_y = torch.clamp(edge_coords[0], 0, H - 1)
+    end_x = torch.clamp(edge_coords[1] + num_pixels * dx, 0, W - 1)
+    end_y = torch.clamp(edge_coords[0] + num_pixels * dy, 0, H - 1)
+    og_color = rgb_image.squeeze()[og_y, og_x].float()
+    og_depth = og_depth_map.squeeze()[og_y, og_x].float()
+    end_color = rgb_image.squeeze()[end_y, end_x].float()
+    end_depth = og_depth_map.squeeze()[end_y, end_x].float()
 
     # Color pixels in the direction
-    H, W = output_mask.shape
     for i in range(1, num_pixels + 1):
         new_x = torch.clamp(edge_coords[1] + i * dx, 0, W - 1)
         new_y = torch.clamp(edge_coords[0] + i * dy, 0, H - 1)
 
         # Ensure we index valid positions only
-        valid_indices = (new_x >= 0) & (new_x < W) & (new_y >= 0) & (new_y < H)
-        output_mask[new_y[valid_indices], new_x[valid_indices]] = 1
+        #valid_indices = (new_x >= 0) & (new_x < W) & (new_y >= 0) & (new_y < H)
+        #output_mask[new_y[valid_indices], new_x[valid_indices]] = 1
 
-    return output_mask
+        #new_depth = og_depth_map.squeeze()[new_y, new_x].float()
+        new_color = rgb_image.squeeze()[new_y, new_x].float()
+        new_to_og = abs(new_color - og_color).sum(dim=1)
+        new_to_end = abs(new_color - end_color).sum(dim=1)
+        depth = torch.where(new_to_og > new_to_end, end_depth, og_depth)
+        ratio_depth = depth / pts_3d[new_y, new_x, -1]
+        pts_3d[new_y, new_x] = pts_3d[new_y, new_x] * ratio_depth.unsqueeze(1)
+
+    return pts_3d.reshape(-1, 3), edges.squeeze()
+    #return ~(output_mask.bool().view(-1))

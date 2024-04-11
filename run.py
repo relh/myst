@@ -79,13 +79,13 @@ def main():
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     args = parser.parse_args()
-    rr.script_setup(args, "13myst")
+    rr.script_setup(args, "14myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    depth_3d = None
+    pts_3d = None
     image = None
     mask = None
     extrinsics = None
@@ -115,16 +115,15 @@ def main():
                                        [0, 0, 0, 1]]).float().cuda()
 
         # --- estimate depth ---
-        if depth_3d is None: 
+        if pts_3d is None: 
             pil_img = Image.fromarray(image.cpu().numpy())
-            depth_3d, depth_colors, focals = img_to_pts_3d_dust(pil_img)
-            mask = detect_edges_and_color_directionally(depth_3d)
-            #depth_3d, depth_colors = depth_3d[mask_3d], depth_colors[mask_3d]
-            depth_3d = pts_cam_to_pts_world(depth_3d, extrinsics)
+            pts_3d, rgb_3d, focals = img_to_pts_3d_dust(pil_img)
+            pts_3d, mask = realign_depth_edges(pts_3d, rgb_3d)
+            pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
 
             #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
             #da_3d = pts_cam_to_pts_world(da_3d, extrinsics)
-            #_, depth_3d = project_and_scale_points_with_color(da_3d, depth_3d, da_colors, depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
+            #_, pts_3d = project_and_scale_points_with_color(da_3d, pts_3d, da_colors, rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
 
             if focals is not None:
                 intrinsics[0, 0] = focals
@@ -133,7 +132,7 @@ def main():
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
-        rr.log(f"world/points", rr.Points3D(depth_3d.cpu().numpy(), colors=depth_colors.cpu().numpy()), timeless=True)
+        rr.log(f"world/points", rr.Points3D(pts_3d.cpu().numpy(), colors=rgb_3d.cpu().numpy()), timeless=True)
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
                            mat3x3=extrinsics[:3, :3].cpu().numpy(), from_parent=True))
@@ -167,7 +166,7 @@ def main():
             inpaint = True
 
         # --- turn 3d points to image ---
-        wombo_img = pts_3d_to_img(depth_3d, depth_colors, intrinsics, extrinsics, (512, 512))
+        wombo_img = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (512, 512))
 
         # --- sideways pipeline ---
         if inpaint: 
@@ -181,21 +180,22 @@ def main():
         if inpaint or infill:
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
 
-            new_depth_3d, new_depth_colors, _ = img_to_pts_3d_dust(pil_img)
-            new_depth_3d = pts_cam_to_pts_world(new_depth_3d, extrinsics)
+            new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(pil_img)
+            new_pts_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
+            new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
 
             #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)
             #new_da_3d = pts_cam_to_pts_world(new_da_3d, extrinsics)
 
             # this re-aligns two point clouds with partial overlap
-            #_, new_depth_3d = project_and_scale_points_with_color(new_da_3d, new_depth_3d, new_da_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
-            _, new_depth_3d = project_and_scale_points_with_color(depth_3d, new_depth_3d, depth_colors, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512))
+            #_, new_pts_3d = project_and_scale_points_with_color(new_da_3d, new_pts_3d, new_da_colors, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
+            _, new_pts_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
 
             # this trims the edges of estimate points incase depth is bad
-            #new_depth_3d, new_depth_colors = trim_points(new_depth_3d, new_depth_colors, border=32)
-            new_depth_3d, new_depth_colors = prune_based_on_viewpoint(new_depth_3d, new_depth_colors, intrinsics, extrinsics, image_shape=(512, 512), k=16, density_threshold=0.5)
+            #new_pts_3d, new_rgb_3d = trim_points(new_pts_3d, new_rgb_3d, border=32)
+            #new_pts_3d, new_rgb_3d = prune_based_on_viewpoint(new_pts_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512), k=16, density_threshold=0.5)
 
-            depth_3d, depth_colors = merge_and_filter(depth_3d, new_depth_3d, depth_colors, new_depth_colors)
+            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
 
     rr.script_teardown(args)
 
