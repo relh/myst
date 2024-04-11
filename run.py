@@ -118,7 +118,7 @@ def main():
         if pts_3d is None: 
             pil_img = Image.fromarray(image.cpu().numpy())
             pts_3d, rgb_3d, focals = img_to_pts_3d_dust(pil_img)
-            pts_3d, mask = realign_depth_edges(pts_3d, rgb_3d)
+            pts_3d, _ = realign_depth_edges(pts_3d, rgb_3d)
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
 
             #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
@@ -181,7 +181,7 @@ def main():
             pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
 
             new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(pil_img)
-            new_pts_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
+            new_pts_3d, _ = realign_depth_edges(new_pts_3d, new_rgb_3d)
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
 
             #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)

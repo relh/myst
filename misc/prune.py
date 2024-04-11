@@ -1,29 +1,15 @@
 import torch
 import kornia as kn
 
-def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, num_pixels=4):
-    """
-    Detects edges using Canny edge detector, calculates gradient directions, 
-    and colors additional pixels in the direction of the gradient on a depth map.
-    
-    Args:
-    - depth_map (Tensor): Depth image tensor of shape ((H*W), 3).
-    - rgb_image (Tensor): RGB image tensor of shape ((H*W), 3).
-    - low_threshold (float): Lower threshold for hysteresis in Canny edge detection.
-    - high_threshold (float): Upper threshold for hysteresis in Canny edge detection.
-    - num_pixels (int): Number of pixels to color in the direction of the edge.
+def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, num_pixels=5):
+    H, W = 512, 512
 
-    Returns:
-    - Tensor: Binary mask indicating edges and colored pixels along the edges.
-    """
+    pts_3d = pts_3d.reshape((H, W, 3))
+    rgb_image = rgb_3d.reshape((H, W, 3)).unsqueeze(0) # Shape: (1, 3, H, W)
 
-    # Assuming depth_map needs reshaping and normalization
-    pts_3d = pts_3d.reshape((512, 512, 3))
-    depth_map = pts_3d.clone()[:, :, -1].unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, H, W)
-    og_depth_map = depth_map.clone().float()
-    depth_map = depth_map.float() / 255.0  # Normalize assuming the depth values are in [0, 255]
-
-    rgb_image = rgb_3d.reshape((512, 512, 3)).unsqueeze(0) # Shape: (1, 3, H, W)
+    depth_map = pts_3d[:, :, -1].clone().float().unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, H, W)
+    og_depth_map = depth_map.clone()
+    depth_map = depth_map / 255.0  # Normalize assuming the depth values are in [0, 255]
 
     # Apply Canny edge detector
     _, edges = kn.filters.canny(depth_map, low_threshold, high_threshold)
@@ -43,9 +29,6 @@ def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, n
     dy = torch.round(torch.sin(grad_direction[edge_coords])).to(torch.long)
 
     # Prepare the output mask
-    #output_mask = edges.squeeze().clone()  # Shape: (H, W)
-    H, W = edges.squeeze().clone().shape
-
     og_x = torch.clamp(edge_coords[1], 0, W - 1)
     og_y = torch.clamp(edge_coords[0], 0, H - 1)
     end_x = torch.clamp(edge_coords[1] + num_pixels * dx, 0, W - 1)
