@@ -91,7 +91,11 @@ def img_to_pts_3d_dust(color_image):
     loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
 
     print(f'loss: {loss}')
-    pts3d = scene.get_pts3d()[0]
+    if loss != loss: 
+        pass
+        breakpoint()
+    else:
+        pts3d = scene.get_pts3d()[0]
     #pts3d = output[f'pred1']['pts3d'][0].to(device)
     #imgs = scene.imgs
     #confidence_masks = scene.get_masks()

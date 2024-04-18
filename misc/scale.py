@@ -20,7 +20,7 @@ def world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_sha
     gt_proj, gt_indices = project_to_image(gt_camera_coords, intrinsics, image_shape)
     gt_proj, gt_unique_indices = torch.unique(gt_proj, dim=0, return_inverse=True)
     gt_colors = gt_colors[gt_indices][gt_unique_indices].float()
-    gt_3d = gt_camera_coords[:3].T[gt_indices][gt_unique_indices]
+    gt_3d = gt_points_3d[gt_indices][gt_unique_indices]
     gt_proj = gt_proj[gt_unique_indices]
     return gt_proj, gt_colors, gt_camera_coords.T, gt_3d
 
@@ -86,22 +86,22 @@ def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     print(f"Initial RMSE: {initial_rmse.item()}")
 
     # Compute centroids of the selected subsets
-    centroid1 = torch.mean(sub_pc1, dim=0)
-    centroid2 = torch.mean(sub_pc2, dim=0)
+    #centroid1 = torch.mean(sub_pc1, dim=0)
+    #centroid2 = torch.mean(sub_pc2, dim=0)
 
     # Compute the scale factor as the ratio of norms of point cloud subsets
-    norm_pc1 = torch.norm(sub_pc1 - centroid1)
-    norm_pc2 = torch.norm(sub_pc2 - centroid2)
+    norm_pc1 = torch.norm(sub_pc1)# - centroid1)
+    norm_pc2 = torch.norm(sub_pc2)# - centroid2)
     scale_factor = norm_pc1 / norm_pc2
 
     # Scale the corresponding part of the second point cloud
-    scaled_pc2 = (sub_pc2 - centroid2) * scale_factor + centroid2
+    scaled_pc2 = (sub_pc2) * scale_factor 
 
     # Compute the translation needed after scaling
-    translation = centroid1 - torch.mean(scaled_pc2, dim=0)
+    translation = -torch.mean(scaled_pc2, dim=0)
 
     # Apply the transformation to the entire second point cloud
-    transformed_pc2 = (pc2 - centroid2) * scale_factor + centroid2 + translation
+    transformed_pc2 = (pc2) * scale_factor + translation
 
     # Compute RMSE after the transformation
     transformed_rmse = torch.sqrt(torch.mean((transformed_pc2[mask2] - pc1[mask1])**2))
@@ -169,7 +169,7 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     print(f'Number of matching colors within threshold: {matches_count}')
 
     if matches_count == 0: 
-        return 1.0, new_points_3d
+        return 1.0, new_points_3d, within_threshold
 
     gt_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
     new_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
@@ -184,7 +184,7 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     if align_mode == 'median':
         diff_3d = gt_image[:, :, :] / new_image[:, :, :]
         scale = diff_3d[within_threshold].median()
-        new_3d_scaled = new_3d * scale 
+        new_3d_scaled = new_points_3d * scale 
     elif align_mode == 'use_o3d':
         # Load the point clouds
         #source = o3d.io.read_point_cloud("path_to_source_point_cloud.ply")
@@ -205,13 +205,14 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     elif align_mode == 'lstsq':
         # TODO use original selected points here
         _, scale, shift = fit_least_squares_shift_scale_with_mask(gt_image, new_image, within_threshold, within_threshold)
-        new_3d_scaled = new_3d
+        new_3d_scaled = new_points_3d 
         new_3d_scaled[:, :3] = new_3d[:, :3] * scale + shift
     print(f'Scale: {scale}, Shift: {shift}')
 
     #breakpoint()
-    points_world_homogeneous = torch.matmul(new_3d_scaled, extrinsics_inv.T)
-    points_world = points_world_homogeneous[:, :3] / points_world_homogeneous[:, 3:]
+    #points_world_homogeneous = torch.matmul(new_3d_scaled, extrinsics_inv.T)
+    #points_world = points_world_homogeneous[:, :3] / points_world_homogeneous[:, 3:]
+    points_world = new_3d_scaled
 
     # TODO FIX within_threshold
     return scale, points_world[:, :3], within_threshold 
