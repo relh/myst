@@ -88,6 +88,9 @@ def img_to_pts_3d_dust(color_image):
     # retrieve useful values from scene:
     mode = GlobalAlignerMode.PointCloudOptimizer if len(color_image) > 2 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
+    loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
+
+    print(f'loss: {loss}')
     pts3d = scene.get_pts3d()[0]
     #pts3d = output[f'pred1']['pts3d'][0].to(device)
     #imgs = scene.imgs
@@ -98,9 +101,10 @@ def img_to_pts_3d_dust(color_image):
         focals = scene.get_focals()[0]
         #scene.get_im_poses()[0]
 
-    if len(color_image) > 2:
+    if len(color_image) >= 2:
         # TODO stick to paired image setup
-        breakpoint()
+        #breakpoint()
+        pass
 
     return torch.tensor(pts3d.reshape(-1, 3) * 1000.0), \
            torch.tensor(np.asarray(color_image[0]).reshape(-1, 3)).to('cuda'), focals

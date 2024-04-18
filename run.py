@@ -196,7 +196,7 @@ def main():
 
             # this re-aligns two point clouds with partial overlap
             #_, new_pts_3d = project_and_scale_points_with_color(new_da_3d, new_pts_3d, new_da_colors, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
-            #_, new_pts_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
+            _, new_pts_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
 
             # this trims the edges of estimate points incase depth is bad
             #new_pts_3d, new_rgb_3d = trim_points(new_pts_3d, new_rgb_3d, border=32)
@@ -219,6 +219,6 @@ if __name__ == "__main__":
     # apply delta extrinsics from EF using nearest neighbors
     # re-render new image with mask
     # in paint black with diffusion
-    with torch.no_grad():
-        #with torch.autocast(device_type="cuda"):
-        main()
+    #with torch.no_grad():
+    #with torch.autocast(device_type="cuda"):
+    main()

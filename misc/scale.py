@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import open3d as o3d
 import torch
 
 
@@ -109,35 +110,40 @@ def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     return transformed_pc2, scale_factor, translation
 
 
-def use_o3d():
-    def load_point_cloud(points, colors):
-        pc = o3d.geometry.PointCloud()
-        pc.points = o3d.utility.Vector3dVector(points)
-        pc.colors = o3d.utility.Vector3dVector(colors)
-        return pc
+def align_partial_point_clouds(source, target, source_mask, target_mask, threshold=1.0, trans_init=None):
+    """
+    Aligns parts of two point clouds using the ICP algorithm and applies the transformation to the whole point cloud.
 
-    gt_pcd = load_point_cloud(select_gt_3d, gt_colors)
-    # Estimate normals (optional but recommended for better registration)
-    pcd1.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
-    pcd2.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+    Parameters:
+    - source: The entire source point cloud (type: o3d.geometry.PointCloud).
+    - target: The entire target point cloud (type: o3d.geometry.PointCloud).
+    - source_mask: Indices of the source point cloud to use for ICP (type: np.ndarray).
+    - target_mask: Indices of the target point cloud to use for ICP (type: np.ndarray).
+    - threshold: The maximum distance threshold between corresponding points (type: float).
+    - trans_init: Initial transformation guess (type: numpy.ndarray).
 
-    # Perform the registration using ICP
-    threshold = 0.02  # Set a threshold for the ICP algorithm
-    registration_result = o3d.pipelines.registration.registration_icp(
-        pcd1, pcd2, threshold, np.eye(4),
-        o3d.pipelines.registration.TransformationEstimationPointToPlane()
+    Returns:
+    - transformed_source: The entire source point cloud transformed (type: o3d.geometry.PointCloud).
+    - icp_result: The result of the ICP registration (type: registration.RegistrationResult).
+    """
+    if trans_init is None:
+        trans_init = np.eye(4)  # Default to the identity matrix if no initial guess
+
+    # Extract the corresponding parts using the provided masks
+    source_part = source.select_by_index(source_mask)
+    target_part = target.select_by_index(target_mask)
+
+    # Perform ICP on the corresponding parts
+    icp_result = o3d.pipelines.registration.registration_icp(
+        source_part, target_part, threshold, trans_init,
+        o3d.pipelines.registration.TransformationEstimationPointToPoint(),
+        o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2000)
     )
 
-    # Check the registration result
-    if registration_result.fitness > 0.5 and registration_result.inlier_rmse < 0.01:
-        print("Registration successful!")
-        # Optionally apply the transformation to align the point clouds
-        pcd2.transform(registration_result.transformation)
-    else:
-        print("Registration failed, bailing out without changes.")
-
-    # Visualize the result
-    o3d.visualization.draw_geometries([pcd1, pcd2])
+    # Apply the computed transformation to the entire source point cloud
+    transformed_source = source.transform(icp_result.transformation)
+    
+    return transformed_source, icp_result
 
 def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
     gt_proj, gt_colors, gt_3d, select_gt_3d = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
@@ -180,7 +186,22 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
         scale = diff_3d[within_threshold].median()
         new_3d_scaled = new_3d * scale 
     elif align_mode == 'use_o3d':
-        use_o3d()
+        # Load the point clouds
+        #source = o3d.io.read_point_cloud("path_to_source_point_cloud.ply")
+        #target = o3d.io.read_point_cloud("path_to_target_point_cloud.ply")
+
+        # Define the masks for the corresponding parts
+        #source_mask = [0, 2, 3, 5]  # example indices of corresponding points
+        #target_mask = [1, 3, 4, 6]  # example indices of corresponding points
+
+        # Align the point clouds based on the corresponding parts
+        transformed_source, icp_result = align_partial_point_clouds(
+            source, target, source_mask, target_mask, threshold=0.5)
+        print("Transformation is:")
+        print(icp_result.transformation)
+
+        # Optionally, visualize the result
+        o3d.visualization.draw_geometries([transformed_source, target])
     elif align_mode == 'lstsq':
         # TODO use original selected points here
         _, scale, shift = fit_least_squares_shift_scale_with_mask(gt_image, new_image, within_threshold, within_threshold)
