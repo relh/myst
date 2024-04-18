@@ -132,6 +132,7 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
     # Extract the corresponding parts using the provided masks
     source_part = source.select_by_index(source_mask)
     target_part = target.select_by_index(target_mask)
+    breakpoint()
 
     # Perform ICP on the corresponding parts
     icp_result = o3d.pipelines.registration.registration_icp(
@@ -180,28 +181,36 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     extrinsics_inv = torch.linalg.pinv(extrinsics)
     scale = None
     shift = None
-    align_mode = 'median'
+    align_mode = 'o3d'
     if align_mode == 'median':
         diff_3d = gt_image[:, :, :] / new_image[:, :, :]
         scale = diff_3d[within_threshold].median()
         new_3d_scaled = new_points_3d * scale 
-    elif align_mode == 'use_o3d':
-        # Load the point clouds
-        #source = o3d.io.read_point_cloud("path_to_source_point_cloud.ply")
-        #target = o3d.io.read_point_cloud("path_to_target_point_cloud.ply")
+    elif align_mode == 'o3d':
+        # TODO pruning the points here is an issue
+        # TODO Breaks the within_threshold symmetry
+        # TODO Revisit to fix everything
 
-        # Define the masks for the corresponding parts
-        #source_mask = [0, 2, 3, 5]  # example indices of corresponding points
-        #target_mask = [1, 3, 4, 6]  # example indices of corresponding points
+        # Load the point clouds
+        source = o3d.geometry.PointCloud()
+        source.points = o3d.utility.Vector3dVector(gt_points_3d.cpu().numpy())
+        source.colors = o3d.utility.Vector3dVector(gt_colors.cpu().numpy())
+
+        target = o3d.geometry.PointCloud()
+        target.points = o3d.utility.Vector3dVector(new_points_3d.cpu().numpy())
+        target.colors = o3d.utility.Vector3dVector(new_colors.cpu().numpy())
+
+        o3d_indices = torch.where(within_threshold.view(-1))[0].tolist()
 
         # Align the point clouds based on the corresponding parts
         transformed_source, icp_result = align_partial_point_clouds(
-            source, target, source_mask, target_mask, threshold=0.5)
+            source, target, o3d_indices, o3d_indices, threshold=0.5)
         print("Transformation is:")
         print(icp_result.transformation)
 
+        breakpoint()
         # Optionally, visualize the result
-        o3d.visualization.draw_geometries([transformed_source, target])
+        #o3d.visualization.draw_geometries([transformed_source, target])
     elif align_mode == 'lstsq':
         # TODO use original selected points here
         _, scale, shift = fit_least_squares_shift_scale_with_mask(gt_image, new_image, within_threshold, within_threshold)

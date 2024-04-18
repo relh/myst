@@ -70,33 +70,34 @@ def img_to_pts_3d_dust(color_image):
     device = 'cuda'
     batch_size = 1
     get_focals = False
+    old = True
     if dust_model is None:
         model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
         dust_model = load_model(model_path, device)
         get_focals = True
 
-    color_image = [Image.fromarray(image.cpu().numpy()) for image in color_image]
+    if old:
+        color_image = [[Image.fromarray(image.cpu().numpy()) for image in color_image][0]]
+    else:
+        color_image = [Image.fromarray(image.cpu().numpy()) for image in color_image]
     images = load_images(color_image, size=512)
 
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
 
-    # at this stage, you have the raw dust3r predictions
-    #view1, pred1 = output['view1'], output['pred1']
-    #view2, pred2 = output['view2'], output['pred2']
-
     # retrieve useful values from scene:
     mode = GlobalAlignerMode.PointCloudOptimizer if len(color_image) > 2 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
-    loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
 
-    print(f'loss: {loss}')
-    if loss != loss: 
-        pass
-        breakpoint()
-    else:
+    if old:
         pts3d = scene.get_pts3d()[0]
-    #pts3d = output[f'pred1']['pts3d'][0].to(device)
+    else:
+        loss = None
+        if len(color_image) > 2:
+            loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
+            pts3d = scene.get_pts3d()[0]
+        else:
+            pts3d = output[f'pred1']['pts3d'][0].to(device)
     #imgs = scene.imgs
     #confidence_masks = scene.get_masks()
 
@@ -104,11 +105,6 @@ def img_to_pts_3d_dust(color_image):
     if get_focals:
         focals = scene.get_focals()[0]
         #scene.get_im_poses()[0]
-
-    if len(color_image) >= 2:
-        # TODO stick to paired image setup
-        #breakpoint()
-        pass
 
     return torch.tensor(pts3d.reshape(-1, 3) * 1000.0), \
            torch.tensor(np.asarray(color_image[0]).reshape(-1, 3)).to('cuda'), focals
