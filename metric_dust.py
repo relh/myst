@@ -77,27 +77,33 @@ def img_to_pts_3d_dust(color_image):
 
     color_image = [Image.fromarray(image.cpu().numpy()) for image in color_image]
     images = load_images(color_image, size=512)
+
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
 
     # at this stage, you have the raw dust3r predictions
-    view1, pred1 = output['view1'], output['pred1']
-    view2, pred2 = output['view2'], output['pred2']
-
-    scene = global_aligner(output, device=device, mode=GlobalAlignerMode.PairViewer)
+    #view1, pred1 = output['view1'], output['pred1']
+    #view2, pred2 = output['view2'], output['pred2']
 
     # retrieve useful values from scene:
-    pts3d = scene.get_pts3d()
+    mode = GlobalAlignerMode.PointCloudOptimizer if len(color_image) > 2 else GlobalAlignerMode.PairViewer
+    scene = global_aligner(output, device=device, mode=mode)
+    pts3d = scene.get_pts3d()[0]
+    #pts3d = output[f'pred1']['pts3d'][0].to(device)
     #imgs = scene.imgs
     #confidence_masks = scene.get_masks()
 
     focals = None
     if get_focals:
         focals = scene.get_focals()[0]
-        scene.get_im_poses()[0]
+        #scene.get_im_poses()[0]
 
-    return torch.tensor(pts3d[0].reshape(-1, 3) * 1000.0), \
-           torch.tensor(np.asarray(color_image).reshape(-1, 3)).to('cuda'), focals
+    if len(color_image) > 2:
+        # TODO stick to paired image setup
+        breakpoint()
+
+    return torch.tensor(pts3d.reshape(-1, 3) * 1000.0), \
+           torch.tensor(np.asarray(color_image[0]).reshape(-1, 3)).to('cuda'), focals
 
 
 if __name__ == '__main__':
@@ -118,8 +124,8 @@ if __name__ == '__main__':
     output = inference(pairs, model, device, batch_size=batch_size)
 
     # at this stage, you have the raw dust3r predictions
-    view1, pred1 = output['view1'], output['pred1']
-    view2, pred2 = output['view2'], output['pred2']
+    #view1, pred1 = output['view1'], output['pred1']
+    #view2, pred2 = output['view2'], output['pred2']
 
     scene = global_aligner(output, device=device, mode=GlobalAlignerMode.PairViewer)
 
