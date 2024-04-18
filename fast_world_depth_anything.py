@@ -68,6 +68,7 @@ def process_video(video_path, output_frame_dir, output_depth_video, output_disp_
         video_reader = VideoReader(video_path)
         save_frames(video_reader, output_frame_dir)
 
+
     if not os.listdir(output_depth_video):
         frame_files = sorted(os.listdir(output_frame_dir), key=lambda x: int(x.split('_')[-1].split('.')[0]))
         for frame_file in frame_files:

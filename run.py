@@ -89,6 +89,7 @@ def main():
     image = None
     mask = None
     extrinsics = None
+    all_images = []
     intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
                                [0.0000, 256.0*1.0, 256.0000],
                                [0.0000, 0.000, 1.0000]]).cuda()
@@ -102,6 +103,8 @@ def main():
             prompt = 'a high-resolution photo of a large kitchen.'
             image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
             mask = torch.ones(512, 512)
+
+            all_images.append(image)
         else:
             image = torch.tensor(wombo_img).to(torch.uint8)
             mask = image.sum(dim=2) < 10
@@ -116,9 +119,9 @@ def main():
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pil_img = Image.fromarray(image.cpu().numpy())
-            pts_3d, rgb_3d, focals = img_to_pts_3d_dust(pil_img)
-            pts_3d, mask_3d = realign_depth_edges(pts_3d, rgb_3d)
+            pts_3d, rgb_3d, focals = img_to_pts_3d_dust(all_images)
+            #pts_3d, mask_3d = realign_depth_edges(pts_3d, rgb_3d)
+            mask_3d = mask
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
 
             #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
@@ -177,11 +180,15 @@ def main():
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[mask] = sq_init[mask]
 
-        if inpaint or infill:
-            pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
+            all_images.append(sq_init)
 
-            new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(pil_img)
-            new_pts_3d, mask_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
+        if inpaint or infill:
+            #pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
+
+            #new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(all_images)
+            pts_3d, rgb_3d, _ = img_to_pts_3d_dust(all_images)
+            #new_pts_3d, new_rgb_3d = density_pruning(new_pts_3d, new_rgb_3d)
+            #new_pts_3d, mask_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
 
             #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)
@@ -195,7 +202,12 @@ def main():
             #new_pts_3d, new_rgb_3d = trim_points(new_pts_3d, new_rgb_3d, border=32)
             #new_pts_3d, new_rgb_3d = prune_based_on_viewpoint(new_pts_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512), k=16, density_threshold=0.5)
 
-            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
+            #pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
+            pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
+
+        if idx == 1:
+            pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
+
 
     rr.script_teardown(args)
 

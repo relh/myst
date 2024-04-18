@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import numpy as np
 import torch
 
 
@@ -32,6 +33,111 @@ def estimate_scale_and_shift(gt_depths, new_depths):
     solution = result.solution
     scale, shift = solution.squeeze()  # Extract scale (s) and shift (b), and remove extra dimensions
     return scale.item(), shift.item()
+
+def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
+    """
+    Fit a least squares shift and scale transformation from pc2 to pc1 using provided masks.
+    pc1, pc2 are (N, 3) tensors representing the point clouds.
+    mask1, mask2 are boolean tensors indicating corresponding points in pc1 and pc2.
+    """
+    # Apply masks to select corresponding points
+    sub_pc1 = pc1[mask1]
+    sub_pc2 = pc2[mask2]
+
+    # Compute centroids of the selected subsets
+    centroid1 = torch.mean(sub_pc1, dim=0)
+    centroid2 = torch.mean(sub_pc2, dim=0)
+
+    # Compute scale factors along each dimension
+    std1 = torch.std(sub_pc1, dim=0, unbiased=False)
+    std2 = torch.std(sub_pc2, dim=0, unbiased=False)
+    scale_factors = std1 / std2
+
+    # Scale the corresponding part of the second point cloud
+    scaled_pc2 = (sub_pc2 - centroid2) * scale_factors + centroid2
+
+    # Compute the translation needed after scaling
+    translation = centroid1 - torch.mean(scaled_pc2, dim=0)
+
+    # Apply the transformation to the entire second point cloud
+    transformed_pc2 = (pc2 - centroid2) * scale_factors + centroid2 + translation
+
+    rmse = torch.sqrt(torch.mean((transformed_pc2[mask2] - pc1[mask1])**2))
+    print(f"Alignment RMSE: {rmse.item()}")
+    rmse = torch.sqrt(torch.mean((pc2[mask2] - pc1[mask1])**2))
+    print(f"Original RMSE: {rmse.item()}")
+
+    return transformed_pc2, scale_factors, translation
+
+
+def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
+    """
+    Fit a least squares shift and scale transformation from pc2 to pc1 using provided masks.
+    pc1, pc2 are (N, 3) tensors representing the point clouds.
+    mask1, mask2 are boolean tensors indicating corresponding points in pc1 and pc2.
+    """
+    # Apply masks to select corresponding points
+    sub_pc1 = pc1[mask1]
+    sub_pc2 = pc2[mask2]
+
+    # Compute the initial RMSE before transformation
+    initial_rmse = torch.sqrt(torch.mean((sub_pc1 - sub_pc2)**2))
+    print(f"Initial RMSE: {initial_rmse.item()}")
+
+    # Compute centroids of the selected subsets
+    centroid1 = torch.mean(sub_pc1, dim=0)
+    centroid2 = torch.mean(sub_pc2, dim=0)
+
+    # Compute the scale factor as the ratio of norms of point cloud subsets
+    norm_pc1 = torch.norm(sub_pc1 - centroid1)
+    norm_pc2 = torch.norm(sub_pc2 - centroid2)
+    scale_factor = norm_pc1 / norm_pc2
+
+    # Scale the corresponding part of the second point cloud
+    scaled_pc2 = (sub_pc2 - centroid2) * scale_factor + centroid2
+
+    # Compute the translation needed after scaling
+    translation = centroid1 - torch.mean(scaled_pc2, dim=0)
+
+    # Apply the transformation to the entire second point cloud
+    transformed_pc2 = (pc2 - centroid2) * scale_factor + centroid2 + translation
+
+    # Compute RMSE after the transformation
+    transformed_rmse = torch.sqrt(torch.mean((transformed_pc2[mask2] - pc1[mask1])**2))
+    print(f"Transformed RMSE: {transformed_rmse.item()}")
+
+    return transformed_pc2, scale_factor, translation
+
+
+def use_o3d():
+    def load_point_cloud(points, colors):
+        pc = o3d.geometry.PointCloud()
+        pc.points = o3d.utility.Vector3dVector(points)
+        pc.colors = o3d.utility.Vector3dVector(colors)
+        return pc
+
+    gt_pcd = load_point_cloud(select_gt_3d, gt_colors)
+    # Estimate normals (optional but recommended for better registration)
+    pcd1.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+    pcd2.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.1, max_nn=30))
+
+    # Perform the registration using ICP
+    threshold = 0.02  # Set a threshold for the ICP algorithm
+    registration_result = o3d.pipelines.registration.registration_icp(
+        pcd1, pcd2, threshold, np.eye(4),
+        o3d.pipelines.registration.TransformationEstimationPointToPlane()
+    )
+
+    # Check the registration result
+    if registration_result.fitness > 0.5 and registration_result.inlier_rmse < 0.01:
+        print("Registration successful!")
+        # Optionally apply the transformation to align the point clouds
+        pcd2.transform(registration_result.transformation)
+    else:
+        print("Registration failed, bailing out without changes.")
+
+    # Visualize the result
+    o3d.visualization.draw_geometries([pcd1, pcd2])
 
 def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
     gt_proj, gt_colors, gt_3d, select_gt_3d = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
@@ -65,28 +171,26 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     gt_image[gt_proj[:, 1], gt_proj[:, 0]] = select_gt_3d
     new_image[new_proj[:, 1], new_proj[:, 0]] = select_new_3d
 
-    median = True 
-    if median:
-        diff_3d = gt_image[:, :, :] / new_image[:, :, :]
-        median = diff_3d[within_threshold].median()
-        print(f'Median: {median}')
-        new_3d_scaled = new_3d * median 
-    else:
-        # Get depth values of matched points
-        gt_depths = gt_image[within_threshold][:, 2]
-        new_depths = new_image[within_threshold][:, 2]
-        
-        # Estimate scale and shift
-        scale, shift = estimate_scale_and_shift(gt_depths, new_depths)
-        print(f'Scale: {scale}, Shift: {shift}')
-        
-        # Apply scale and shift to the new_points' depth
-        new_3d_scaled = new_3d.clone()  # Clone to avoid modifying the original
-        new_3d_scaled[:, :3] = new_3d[:, :3] * scale + shift
-
     extrinsics_inv = torch.linalg.pinv(extrinsics)
+    scale = None
+    shift = None
+    align_mode = 'median'
+    if align_mode == 'median':
+        diff_3d = gt_image[:, :, :] / new_image[:, :, :]
+        scale = diff_3d[within_threshold].median()
+        new_3d_scaled = new_3d * scale 
+    elif align_mode == 'use_o3d':
+        use_o3d()
+    elif align_mode == 'lstsq':
+        # TODO use original selected points here
+        _, scale, shift = fit_least_squares_shift_scale_with_mask(gt_image, new_image, within_threshold, within_threshold)
+        new_3d_scaled = new_3d
+        new_3d_scaled[:, :3] = new_3d[:, :3] * scale + shift
+    print(f'Scale: {scale}, Shift: {shift}')
+
+    #breakpoint()
     points_world_homogeneous = torch.matmul(new_3d_scaled, extrinsics_inv.T)
     points_world = points_world_homogeneous[:, :3] / points_world_homogeneous[:, 3:]
 
     # TODO FIX within_threshold
-    return median, points_world[:, :3], within_threshold 
+    return scale, points_world[:, :3], within_threshold 
