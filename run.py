@@ -203,7 +203,7 @@ def main():
             #new_pts_3d, new_rgb_3d = trim_points(new_pts_3d, new_rgb_3d, border=32)
             #new_pts_3d, new_rgb_3d = prune_based_on_viewpoint(new_pts_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512), k=16, density_threshold=0.5)
             # --- setting epsilon explicitly to avoid square image dependency
-            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, epsilon=1.5)
+            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, epsilon=5.0)
             #pts_3d = torch.cat((pts_3d, new_pts_3d), dim=0)
             #rgb_3d = torch.cat((rgb_3d, new_rgb_3d), dim=0)
 

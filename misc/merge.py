@@ -1,10 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import numpy as np
+import open3d as o3d
 import torch
+import torch.nn.functional as F
+from pytorch3d.ops import knn_points
 
 
-def calculate_dynamic_epsilon(point_cloud):
+def square_calculate_dynamic_epsilon(point_cloud):
     """
     Calculate a dynamic epsilon based on the average distance between adjacent points in a dense point cloud.
 
@@ -27,6 +31,60 @@ def calculate_dynamic_epsilon(point_cloud):
     avg_dist = torch.mean(torch.cat((dist_x.flatten(), dist_y.flatten())))
 
     return avg_dist
+
+def slow_calculate_dynamic_epsilon(point_cloud):
+    """
+    Calculate a dynamic epsilon based on the average distance to the nearest neighbor in a point cloud.
+    
+    :param point_cloud: Input point cloud as a PyTorch tensor of shape (N, 3), where N is the number of points.
+    :return: Calculated epsilon value.
+    """
+    # Convert PyTorch tensor to numpy array
+    pc_numpy = point_cloud.cpu().numpy()
+    
+    # Convert numpy array to Open3D point cloud format
+    pc_o3d = o3d.geometry.PointCloud()
+    pc_o3d.points = o3d.utility.Vector3dVector(pc_numpy)
+    
+    # Compute the k-nearest neighbors (k=2)
+    kdtree = o3d.geometry.KDTreeFlann(pc_o3d)
+    distances = []
+    for i in range(len(pc_o3d.points)):
+        # Search for k-nearest neighbors
+        _, idx, dist = kdtree.search_knn_vector_3d(pc_o3d.points[i], 5)
+        # Append the distance to the nearest neighbor (not including itself)
+        distances.append(np.sqrt(dist[1]))
+    
+    # Compute the average of the distances
+    avg_distance = np.mean(distances)
+    return avg_distance
+
+def calculate_dynamic_epsilon(point_cloud):
+    """
+    Calculate a dynamic epsilon based on the average distance to the four nearest neighbors in a point cloud.
+    This version uses PyTorch3D for GPU acceleration.
+    
+    :param point_cloud: Input point cloud as a PyTorch tensor of shape (N, 3), where N is the number of points.
+    :return: Calculated epsilon value.
+    """
+    # Ensure the point cloud is on the appropriate device (e.g., GPU)
+    point_cloud = point_cloud.to(device='cuda')  # Move data to GPU if available
+
+    # Calculate the 5 nearest neighbors using PyTorch3D (including itself)
+    # We use k=5 to get four neighbors plus the point itself
+    neighbors = knn_points(point_cloud[None, :, :], point_cloud[None, :, :], K=5, return_sorted=False)
+    
+    # Compute distances to the nearest neighbors, shape is (1, N, 5)
+    distances = neighbors.dists.squeeze(0)  # Remove batch dimension
+    
+    # Remove the distance to itself (which is the smallest, and hence the first)
+    valid_distances = distances[:, 1:]  # Skip the first column, which is distance to itself
+    
+    # Compute the average distance to the four nearest neighbors
+    avg_distance = torch.mean(valid_distances)
+    
+    return avg_distance.item()
+
 
 def trim_points(new_da_3d, new_da_colors, border=1):
     """
