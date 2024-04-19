@@ -101,7 +101,7 @@ def main():
             #prompt = input(f"enter stable diffusion initial scene: ")
             prompt = 'a high-resolution photo of a large kitchen.'
             image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
-            mask = torch.ones(512, 512)
+            mask = mask_3d = torch.ones(512, 512)
 
             all_images.insert(0, image)
         else:
@@ -119,19 +119,24 @@ def main():
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, focals = img_to_pts_3d_dust(all_images)
-            #pts_3d, mask_3d = realign_depth_edges(pts_3d, rgb_3d)
-            mask_3d = mask
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
             pts_3d, rgb_3d = density_pruning_torch3d(pts_3d, rgb_3d)
-
-            #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
-            #da_3d = pts_cam_to_pts_world(da_3d, extrinsics)
-            #_, pts_3d = project_and_scale_points_with_color(da_3d, pts_3d, da_colors, rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
 
             if focals is not None:
                 intrinsics[0, 0] = focals
                 intrinsics[1, 1] = focals
                 print(intrinsics)
+
+                if args.renderer != 'raster':
+                    cameras = PerspectiveCameras(
+                        device='cuda',
+                        R=torch.eye(3).unsqueeze(0),
+                        in_ndc=False,
+                        T=torch.zeros(1, 3),
+                        focal_length=-intrinsics[0,0].unsqueeze(0),
+                        principal_point=intrinsics[:2,2].unsqueeze(0),
+                        image_size=torch.ones(1, 2) * 512,
+                    )
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -169,7 +174,7 @@ def main():
             inpaint = True
 
         # --- turn 3d points to image ---
-        wombo_img = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (512, 512))
+        wombo_img = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (512, 512), cameras)
 
         # --- sideways pipeline ---
         if inpaint: 
@@ -179,7 +184,6 @@ def main():
             sq_init = run_inpaint(wombo_img, mask.float(), prompt=prompt)
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[mask] = sq_init[mask]
-
             all_images.insert(0, sq_init)
 
         if inpaint or infill:
@@ -188,26 +192,13 @@ def main():
             # --- lift img to 3d ---
             new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(all_images)
             new_pts_3d, new_rgb_3d = density_pruning_torch3d(new_pts_3d, new_rgb_3d)
-            #new_pts_3d, mask_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
-            #extrinsics_inv = torch.linalg.pinv(extrinsics)
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
-            #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)
-            #new_da_3d = pts_cam_to_pts_world(new_da_3d, extrinsics)
 
             # --- re-aligns two point clouds with partial overlap ---
-            #_, new_pts_3d = project_and_scale_points_with_color(new_da_3d, new_pts_3d, new_da_colors, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
             _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
 
             # --- merge and filtering new point cloud ---
-            #new_pts_3d, new_rgb_3d = trim_points(new_pts_3d, new_rgb_3d, border=32)
-            #new_pts_3d, new_rgb_3d = prune_based_on_viewpoint(new_pts_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512), k=16, density_threshold=0.5)
-            # --- setting epsilon explicitly to avoid square image dependency
             pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
-            #pts_3d = torch.cat((pts_3d, new_pts_3d), dim=0)
-            #rgb_3d = torch.cat((rgb_3d, new_rgb_3d), dim=0)
-
-            # --- density pruning ---
-            #pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
 if __name__ == "__main__":

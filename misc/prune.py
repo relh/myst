@@ -5,7 +5,7 @@ import torch
 from pytorch3d.ops import knn_points
 
 
-def density_pruning_torch3d(points, colors, nb_neighbors=10, std_ratio=3.0):
+def density_pruning_torch3d(points, colors, nb_neighbors=9, std_ratio=2.0):
     # Ensure points and colors are on the same device and in float format
     device = points.device
     points = points.float()
@@ -20,19 +20,22 @@ def density_pruning_torch3d(points, colors, nb_neighbors=10, std_ratio=3.0):
     # Distances to k nearest neighbors
     distances = knn.dists
 
-    # Mean and std of distances
+    # Mean of distances for each point to its neighbors
     mean_distances = distances.mean(dim=2)
-    std_distances = distances.std(dim=2)
 
-    # Threshold for determining outliers
-    threshold = mean_distances + std_ratio * std_distances
+    # Global mean and standard deviation of these mean distances
+    global_mean = mean_distances.mean()
+    global_std = mean_distances.std()
+
+    # Threshold for determining outliers based on global mean and std
+    threshold = global_mean + std_ratio * global_std
 
     # Mask for non-outliers
-    non_outlier_mask = (distances.max(dim=2).values < threshold).squeeze(0)
+    non_outlier_mask = (mean_distances < threshold).squeeze()
 
     # Apply mask to points and colors
-    pruned_points = points[0][non_outlier_mask]
-    pruned_colors = colors[non_outlier_mask]
+    pruned_points = points[0][non_outlier_mask]  # Remove batch dimension for output
+    pruned_colors = colors[non_outlier_mask]  # Remove batch dimension for output
 
     return pruned_points, pruned_colors
 

@@ -89,6 +89,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     #'''
     output = pipeline(
       prompt=prompt,
+      negative_prompt='blurry, low-resolution',
       image=image,
       mask_image=mask_image,
       guidance_scale=8.0,

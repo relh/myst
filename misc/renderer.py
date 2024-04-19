@@ -19,22 +19,12 @@ from pytorch3d.structures import Meshes, Pointclouds
 sys.path.append('depth_anything/metric_depth/')
 
 
-def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape):
+def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras):
     points_3d = torch.cat((points_3d.clone(), torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
     points_3d_trans = extrinsics @ points_3d
     
-    cameras = PerspectiveCameras(
-        device=points_3d.device,
-        R=torch.eye(3).unsqueeze(0),
-        in_ndc=False,
-        T=torch.zeros(1, 3),
-        focal_length=-intrinsics[0,0].unsqueeze(0),
-        principal_point=intrinsics[:2,2].unsqueeze(0),
-        image_size=torch.ones(1, 2) * 512,
-    )
-    
     point_cloud = Pointclouds(points=[(points_3d_trans[:3] / points_3d_trans[3]).T], 
-                              features=[colors.clone().float() / 255.0])
+                              features=[colors.float() / 255.0])
     
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
