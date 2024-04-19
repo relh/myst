@@ -220,4 +220,13 @@ if __name__ == "__main__":
     # in paint black with diffusion
     #with torch.no_grad():
     #with torch.autocast(device_type="cuda"):
+    import cProfile
+    import pstats
+
+    profiler = cProfile.Profile()
+    profiler.enable()
     main()
+    profiler.disable()
+    stats = pstats.Stats(profiler).sort_stats('cumtime')
+    stats.print_stats()
+    breakpoint()
