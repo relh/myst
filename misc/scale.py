@@ -11,29 +11,19 @@ def project_to_image(camera_coords, intrinsics, image_shape):
     proj_pts = intrinsics @ camera_coords[:3, :]
     im_proj_pts = proj_pts[:2] / proj_pts[2]
     x_pixels, y_pixels = torch.round(im_proj_pts).long()
-    valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) & (y_pixels >= 0) & (y_pixels < image_shape[0])
+    valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) &\
+                 (y_pixels >= 0) & (y_pixels < image_shape[0]) &\
+                 (camera_coords[2, :] > 0.0)
     return torch.stack([x_pixels[valid_mask], y_pixels[valid_mask]], dim=1), torch.arange(camera_coords.shape[-1], device=camera_coords.device)[valid_mask]
 
 def world_to_filtered(points_3d, colors, intrinsics, extrinsics, image_shape):
-    #points_3d = points_3d.clone().floor()
     camera_coords = extrinsics @ torch.cat((points_3d.clone(), torch.ones((points_3d.shape[0], 1), device=points_3d.device)), dim=1).T
     proj, indices = project_to_image(camera_coords, intrinsics, image_shape)
     proj, unique_indices = torch.unique(proj, dim=0, return_inverse=True)
     colors = colors[indices][unique_indices].float()
-    pts_3d = points_3d[indices][unique_indices]
+    pts_3d = camera_coords.T[indices][unique_indices][:, :3]
     proj = proj[unique_indices]
-    return proj, colors, points_3d, pts_3d
-
-def estimate_scale_and_shift(gt_depths, new_depths):
-    A = torch.vstack((new_depths, torch.ones_like(new_depths))).T  # Transpose to get the correct shape
-    
-    # Use torch.linalg.lstsq for the least squares solution
-    # Note the reversed order of A and gt_depths compared to the deprecated torch.lstsq
-    result = torch.linalg.lstsq(A, gt_depths.unsqueeze(1))
-
-    solution = result.solution
-    scale, shift = solution.squeeze()  # Extract scale (s) and shift (b), and remove extra dimensions
-    return scale.item(), shift.item()
+    return proj, colors, points_3d, pts_3d, camera_coords.T
 
 def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     """
@@ -102,8 +92,8 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
     return icp_result
 
 def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
-    gt_proj, mod_gt_colors, gt_3d, select_gt_3d = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
-    new_proj, mod_new_colors, new_3d, select_new_3d = world_to_filtered(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
+    gt_proj, mod_gt_colors, gt_3d, select_gt_3d, gt_camera = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
+    new_proj, mod_new_colors, new_3d, select_new_3d, new_camera = world_to_filtered(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
 
     # Initialize two tensors filled with -1 (indicating empty/invalid)
     gt_c_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
@@ -141,8 +131,13 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     if align_mode == 'median':
         diff_3d = gt_image[:, :, :] / new_image[:, :, :]
         scale = diff_3d[within_threshold].median()
-        new_3d_scaled = new_points_3d * scale 
         new_3d_colors = new_colors
+        new_3d_scaled = new_camera
+        new_3d_scaled[:, :3] *= scale
+
+        # --- for reversing extrinsics ---
+        new_3d_scaled = torch.matmul(new_3d_scaled, extrinsics_inv.T)
+        new_3d_scaled = new_3d_scaled[:, :3] / new_3d_scaled[:, 3:]
 
     elif align_mode == 'o3d':
         source = o3d.geometry.PointCloud()
@@ -177,9 +172,4 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
         new_3d_colors = new_colors
 
     print(f'Scale: {scale}, Shift: {shift}')
-
-    # --- for reversing extrinsics ---
-    #points_world_homogeneous = torch.matmul(new_3d_scaled, extrinsics_inv.T)
-    #points_world = points_world_homogeneous[:, :3] / points_world_homogeneous[:, 3:]
-
     return scale, new_3d_scaled, new_3d_colors, within_threshold 

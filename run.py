@@ -49,12 +49,12 @@ def move_camera(extrinsics, direction, amount):
     R = extrinsics[:3, :3]
     
     if direction in ['w', 's']:
-        # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
-        amount = 40.0 * (-amount if direction == 'w' else amount)
+        # Direction vector for forward/backward 
+        amount = 75.0 * (-amount if direction == 'w' else amount)
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
     elif direction in ['q', 'e']:
-        # Direction vector for forward/backward (assuming the camera looks towards the positive Z in its local space)
-        amount = 40.0 * (-amount if direction == 'q' else amount)
+        # Direction vector for up/down 
+        amount = 75.0 * (-amount if direction == 'q' else amount)
         extrinsics[:3, 3] += torch.tensor([0, amount, 0], device=extrinsics.device).float()
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
@@ -68,7 +68,6 @@ def move_camera(extrinsics, direction, amount):
         ], device=extrinsics.device)
         # Apply rotation to the extrinsics matrix
         extrinsics = torch.matmul(rotation_matrix, extrinsics)
-    
     return extrinsics
 
 

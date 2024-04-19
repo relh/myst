@@ -20,6 +20,33 @@ from dust3r.inference import inference, load_model
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 dust_model = None
 
+def supersample_point_cloud(point_cloud):
+    """
+    Supersample a point cloud by interpolating points between adjacent points in both x and y directions.
+
+    :param point_cloud: Input point cloud as a PyTorch tensor of shape (height, width, 3).
+    :return: Supersampled point cloud.
+    """
+    height, width, _ = point_cloud.shape
+    
+    # Interpolate along x-axis
+    interpolated_x = (point_cloud[:, :-1, :] + point_cloud[:, 1:, :]) / 2
+    
+    # Concatenate the original and the interpolated points along x-axis
+    supersampled_x = torch.empty(height, 2 * width - 1, 3)
+    supersampled_x[:, 0::2, :] = point_cloud
+    supersampled_x[:, 1::2, :] = interpolated_x
+
+    # Interpolate along y-axis
+    interpolated_y = (supersampled_x[:-1, :, :] + supersampled_x[1:, :, :]) / 2
+    
+    # Concatenate the original and the interpolated points along y-axis
+    supersampled_xy = torch.empty(2 * height - 1, 2 * width - 1, 3)
+    supersampled_xy[0::2, :, :] = supersampled_x
+    supersampled_xy[1::2, :, :] = interpolated_y
+
+    return supersampled_xy.to('cuda')
+
 def _resize_pil_image(img, long_edge_size):
     S = max(img.size)
     if S > long_edge_size:
@@ -70,45 +97,55 @@ def img_to_pts_3d_dust(color_image):
     device = 'cuda'
     batch_size = 1
     get_focals = False
-    old = True
+    one_frame = True
     if dust_model is None:
         model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
         dust_model = load_model(model_path, device)
         get_focals = True
 
-    if old:
+    # --- whether to standalone use this image or not ---
+    if one_frame:
         color_image = [[Image.fromarray(image.cpu().numpy()) for image in color_image][0]]
     else:
         color_image = [Image.fromarray(image.cpu().numpy()) for image in color_image]
     images = load_images(color_image, size=512)
 
+    # --- run dust3r ---
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
-
-    # retrieve useful values from scene:
     mode = GlobalAlignerMode.PointCloudOptimizer if len(color_image) > 2 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
 
-    if old:
-        pts3d = scene.get_pts3d()[0]
+    # --- either get pts or run global optimization ---
+    if one_frame:
+        pts_3d = scene.get_pts3d()[0]
     else:
         loss = None
         if len(color_image) > 2:
             loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
-            pts3d = scene.get_pts3d()[0]
+            pts_3d = scene.get_pts3d()[0]
         else:
-            pts3d = output[f'pred1']['pts3d'][0].to(device)
+            pts_3d = output[f'pred1']['pts3d'][0].to(device)
     #imgs = scene.imgs
     #confidence_masks = scene.get_masks()
 
+    # --- find focal length ---
     focals = None
     if get_focals:
         focals = scene.get_focals()[0]
         #scene.get_im_poses()[0]
 
-    return torch.tensor(pts3d.reshape(-1, 3) * 1000.0), \
-           torch.tensor(np.asarray(color_image[0]).reshape(-1, 3)).to('cuda'), focals
+    supersample = True
+    if supersample:
+        pts_3d = supersample_point_cloud(pts_3d.to(device))
 
+        rgb_3d = torch.tensor(np.asarray(color_image[0])).float().to(device)
+        rgb_3d = supersample_point_cloud(rgb_3d).to(torch.uint8)
+    else:
+        rgb_3d = torch.tensor(np.asarray(color_image[0])).to(torch.uint8).to(device)
+
+    return pts_3d.reshape(-1, 3) * 1000.0, \
+           rgb_3d.reshape(-1, 3), focals
 
 if __name__ == '__main__':
     model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
