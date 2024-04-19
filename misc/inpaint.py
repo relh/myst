@@ -81,7 +81,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     else:
         strength = pipeline.next_strength 
         seed = random.randint(0, 99999)
-    print(f'seed is.. {seed}')
+    #print(f'seed is.. {seed}')
     generator = torch.Generator(device="cuda").manual_seed(seed)
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
     #mask_image = pipeline.mask_processor.blur(mask_image, blur_factor=33)

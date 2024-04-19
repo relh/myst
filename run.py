@@ -123,6 +123,7 @@ def main():
             #pts_3d, mask_3d = realign_depth_edges(pts_3d, rgb_3d)
             mask_3d = mask
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
+            pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
 
             #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
             #da_3d = pts_cam_to_pts_world(da_3d, extrinsics)
@@ -185,30 +186,29 @@ def main():
         if inpaint or infill:
             #pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
 
+            # --- lift img to 3d ---
             new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(all_images)
             #new_pts_3d, new_rgb_3d = density_pruning(new_pts_3d, new_rgb_3d)
             #new_pts_3d, mask_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
             #extrinsics_inv = torch.linalg.pinv(extrinsics)
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
-
             #new_da_3d, new_da_colors, _ = img_to_pts_3d_da(pil_img)
             #new_da_3d = pts_cam_to_pts_world(new_da_3d, extrinsics)
 
-            # this re-aligns two point clouds with partial overlap
+            # --- re-aligns two point clouds with partial overlap ---
             #_, new_pts_3d = project_and_scale_points_with_color(new_da_3d, new_pts_3d, new_da_colors, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
-            _, new_pts_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
+            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
 
-            # this trims the edges of estimate points incase depth is bad
+            # --- merge and filtering new point cloud ---
             #new_pts_3d, new_rgb_3d = trim_points(new_pts_3d, new_rgb_3d, border=32)
             #new_pts_3d, new_rgb_3d = prune_based_on_viewpoint(new_pts_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512), k=16, density_threshold=0.5)
+            # --- setting epsilon explicitly to avoid square image dependency
+            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, epsilon=1.5)
+            #pts_3d = torch.cat((pts_3d, new_pts_3d), dim=0)
+            #rgb_3d = torch.cat((rgb_3d, new_rgb_3d), dim=0)
 
-            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
+            # --- density pruning ---
             pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
-
-        if idx == 1:
-            pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
-
-
     rr.script_teardown(args)
 
 if __name__ == "__main__":

@@ -14,15 +14,15 @@ def project_to_image(camera_coords, intrinsics, image_shape):
     valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) & (y_pixels >= 0) & (y_pixels < image_shape[0])
     return torch.stack([x_pixels[valid_mask], y_pixels[valid_mask]], dim=1), torch.arange(camera_coords.shape[-1], device=camera_coords.device)[valid_mask]
 
-def world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape):
-    #gt_points_3d = gt_points_3d.clone().floor()
-    gt_camera_coords = extrinsics @ torch.cat((gt_points_3d, torch.ones((gt_points_3d.shape[0], 1), device=gt_points_3d.device)), dim=1).T
-    gt_proj, gt_indices = project_to_image(gt_camera_coords, intrinsics, image_shape)
-    gt_proj, gt_unique_indices = torch.unique(gt_proj, dim=0, return_inverse=True)
-    gt_colors = gt_colors[gt_indices][gt_unique_indices].float()
-    gt_3d = gt_points_3d[gt_indices][gt_unique_indices]
-    gt_proj = gt_proj[gt_unique_indices]
-    return gt_proj, gt_colors, gt_camera_coords.T, gt_3d
+def world_to_filtered(points_3d, colors, intrinsics, extrinsics, image_shape):
+    #points_3d = points_3d.clone().floor()
+    camera_coords = extrinsics @ torch.cat((points_3d.clone(), torch.ones((points_3d.shape[0], 1), device=points_3d.device)), dim=1).T
+    proj, indices = project_to_image(camera_coords, intrinsics, image_shape)
+    proj, unique_indices = torch.unique(proj, dim=0, return_inverse=True)
+    colors = colors[indices][unique_indices].float()
+    pts_3d = points_3d[indices][unique_indices]
+    proj = proj[unique_indices]
+    return proj, colors, points_3d, pts_3d
 
 def estimate_scale_and_shift(gt_depths, new_depths):
     A = torch.vstack((new_depths, torch.ones_like(new_depths))).T  # Transpose to get the correct shape
@@ -70,46 +70,6 @@ def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
 
     return transformed_pc2, scale_factors, translation
 
-
-def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
-    """
-    Fit a least squares shift and scale transformation from pc2 to pc1 using provided masks.
-    pc1, pc2 are (N, 3) tensors representing the point clouds.
-    mask1, mask2 are boolean tensors indicating corresponding points in pc1 and pc2.
-    """
-    # Apply masks to select corresponding points
-    sub_pc1 = pc1[mask1]
-    sub_pc2 = pc2[mask2]
-
-    # Compute the initial RMSE before transformation
-    initial_rmse = torch.sqrt(torch.mean((sub_pc1 - sub_pc2)**2))
-    print(f"Initial RMSE: {initial_rmse.item()}")
-
-    # Compute centroids of the selected subsets
-    #centroid1 = torch.mean(sub_pc1, dim=0)
-    #centroid2 = torch.mean(sub_pc2, dim=0)
-
-    # Compute the scale factor as the ratio of norms of point cloud subsets
-    norm_pc1 = torch.norm(sub_pc1)# - centroid1)
-    norm_pc2 = torch.norm(sub_pc2)# - centroid2)
-    scale_factor = norm_pc1 / norm_pc2
-
-    # Scale the corresponding part of the second point cloud
-    scaled_pc2 = (sub_pc2) * scale_factor 
-
-    # Compute the translation needed after scaling
-    translation = -torch.mean(scaled_pc2, dim=0)
-
-    # Apply the transformation to the entire second point cloud
-    transformed_pc2 = (pc2) * scale_factor + translation
-
-    # Compute RMSE after the transformation
-    transformed_rmse = torch.sqrt(torch.mean((transformed_pc2[mask2] - pc1[mask1])**2))
-    print(f"Transformed RMSE: {transformed_rmse.item()}")
-
-    return transformed_pc2, scale_factor, translation
-
-
 def align_partial_point_clouds(source, target, source_mask, target_mask, threshold=1.0, trans_init=None):
     """
     Aligns parts of two point clouds using the ICP algorithm and applies the transformation to the whole point cloud.
@@ -132,7 +92,6 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
     # Extract the corresponding parts using the provided masks
     source_part = source.select_by_index(source_mask)
     target_part = target.select_by_index(target_mask)
-    breakpoint()
 
     # Perform ICP on the corresponding parts
     icp_result = o3d.pipelines.registration.registration_icp(
@@ -140,29 +99,25 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
         o3d.pipelines.registration.TransformationEstimationPointToPoint(),
         o3d.pipelines.registration.ICPConvergenceCriteria(max_iteration=2000)
     )
-
-    # Apply the computed transformation to the entire source point cloud
-    transformed_source = source.transform(icp_result.transformation)
-    
-    return transformed_source, icp_result
+    return icp_result
 
 def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
-    gt_proj, gt_colors, gt_3d, select_gt_3d = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
-    new_proj, new_colors, new_3d, select_new_3d = world_to_filtered(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
+    gt_proj, mod_gt_colors, gt_3d, select_gt_3d = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
+    new_proj, mod_new_colors, new_3d, select_new_3d = world_to_filtered(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
 
     # Initialize two tensors filled with -1 (indicating empty/invalid)
-    gt_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
-    new_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
+    gt_c_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
+    new_c_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
 
     # Fill the tensors with the RGB colors at the specified coordinates
-    gt_image[gt_proj[:, 1], gt_proj[:, 0]] = gt_colors
-    new_image[new_proj[:, 1], new_proj[:, 0]] = new_colors
+    gt_c_image[gt_proj[:, 1], gt_proj[:, 0]] = mod_gt_colors
+    new_c_image[new_proj[:, 1], new_proj[:, 0]] = mod_new_colors
 
     # Find indices where both tensors have valid (non-empty) colors
-    valid_indices = ((gt_image != -1) & (new_image != -1)).all(dim=2)  # Both have valid RGB colors
+    valid_indices = ((gt_c_image != -1) & (new_c_image != -1)).all(dim=2)  # Both have valid RGB colors
 
     # Calculate the difference between colors at valid indices
-    color_difference = torch.abs(gt_image - new_image).sum(dim=2)
+    color_difference = torch.abs(gt_c_image - new_c_image).sum(dim=2)
 
     # Check if the difference is within the threshold (60) for all RGB channels
     within_threshold = (color_difference <= 60) & valid_indices
@@ -170,6 +125,7 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     print(f'Number of matching colors within threshold: {matches_count}')
 
     if matches_count == 0: 
+        breakpoint()
         return 1.0, new_points_3d, within_threshold
 
     gt_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
@@ -181,47 +137,49 @@ def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, 
     extrinsics_inv = torch.linalg.pinv(extrinsics)
     scale = None
     shift = None
-    align_mode = 'o3d'
+    align_mode = 'median'
     if align_mode == 'median':
         diff_3d = gt_image[:, :, :] / new_image[:, :, :]
         scale = diff_3d[within_threshold].median()
         new_3d_scaled = new_points_3d * scale 
-    elif align_mode == 'o3d':
-        # TODO pruning the points here is an issue
-        # TODO Breaks the within_threshold symmetry
-        # TODO Revisit to fix everything
+        new_3d_colors = new_colors
 
-        # Load the point clouds
+    elif align_mode == 'o3d':
         source = o3d.geometry.PointCloud()
-        source.points = o3d.utility.Vector3dVector(gt_points_3d.cpu().numpy())
-        source.colors = o3d.utility.Vector3dVector(gt_colors.cpu().numpy())
+        source.points = o3d.utility.Vector3dVector(gt_image.view(-1, 3).cpu().numpy())
+        source.colors = o3d.utility.Vector3dVector(gt_c_image.view(-1, 3).cpu().numpy())
 
         target = o3d.geometry.PointCloud()
-        target.points = o3d.utility.Vector3dVector(new_points_3d.cpu().numpy())
-        target.colors = o3d.utility.Vector3dVector(new_colors.cpu().numpy())
+        target.points = o3d.utility.Vector3dVector(new_image.view(-1, 3).cpu().numpy())
+        target.colors = o3d.utility.Vector3dVector(new_c_image.view(-1, 3).cpu().numpy())
 
         o3d_indices = torch.where(within_threshold.view(-1))[0].tolist()
 
         # Align the point clouds based on the corresponding parts
-        transformed_source, icp_result = align_partial_point_clouds(
+        icp_result = align_partial_point_clouds(
             source, target, o3d_indices, o3d_indices, threshold=0.5)
-        print("Transformation is:")
-        print(icp_result.transformation)
+        scale = shift = icp_result.transformation
 
-        breakpoint()
-        # Optionally, visualize the result
-        #o3d.visualization.draw_geometries([transformed_source, target])
+        # Apply the computed transformation to the entire source point cloud
+        new_3d_scaled = o3d.geometry.PointCloud()
+        new_3d_scaled.points = o3d.utility.Vector3dVector(new_3d.cpu().numpy())
+        new_3d_scaled.colors = o3d.utility.Vector3dVector(new_colors.cpu().numpy())
+        new_3d_scaled = new_3d_scaled.transform(icp_result.transformation)
+
+        new_3d_colors = torch.tensor(np.asarray(new_3d_scaled.colors)).to(torch.uint8).to('cuda')#[within_threshold.view(-1)]
+        new_3d_scaled = torch.tensor(np.asarray(new_3d_scaled.points)).float().to('cuda')#[within_threshold.view(-1)]
+
     elif align_mode == 'lstsq':
         # TODO use original selected points here
         _, scale, shift = fit_least_squares_shift_scale_with_mask(gt_image, new_image, within_threshold, within_threshold)
         new_3d_scaled = new_points_3d 
         new_3d_scaled[:, :3] = new_3d[:, :3] * scale + shift
+        new_3d_colors = new_colors
+
     print(f'Scale: {scale}, Shift: {shift}')
 
-    #breakpoint()
+    # --- for reversing extrinsics ---
     #points_world_homogeneous = torch.matmul(new_3d_scaled, extrinsics_inv.T)
     #points_world = points_world_homogeneous[:, :3] / points_world_homogeneous[:, 3:]
-    points_world = new_3d_scaled
 
-    # TODO FIX within_threshold
-    return scale, points_world[:, :3], within_threshold 
+    return scale, new_3d_scaled, new_3d_colors, within_threshold 

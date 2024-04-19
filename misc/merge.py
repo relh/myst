@@ -70,7 +70,8 @@ def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=None):
     :param epsilon: Proximity threshold, points closer than this are considered duplicates.
     :return: Tuple of merged point cloud and colors as PyTorch tensors.
     """
-    epsilon = calculate_dynamic_epsilon(new_da_3d)
+    if epsilon is None: 
+        epsilon = calculate_dynamic_epsilon(new_da_3d)
     print(f'Epsilon: {epsilon}')
 
     # Exclude black points from new_da_3d
