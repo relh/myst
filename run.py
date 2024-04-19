@@ -14,7 +14,6 @@ from argparse import ArgumentParser
 
 import rerun as rr  # pip install rerun-sdk
 import torch
-from PIL import Image
 
 from metric_depth import img_to_pts_3d_da, pts_cam_to_pts_world
 from metric_dust import img_to_pts_3d_dust

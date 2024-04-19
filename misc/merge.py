@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import open3d as o3d
 import torch
-import torch.nn.functional as F
 from pytorch3d.ops import knn_points
 
 

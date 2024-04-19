@@ -3,18 +3,12 @@
 
 import sys
 
-import pytorch3d.ops
 import rerun as rr  # pip install rerun-sdk
 import torch
-import torch.nn as nn
-from pytorch3d.renderer import (AlphaCompositor, MeshRasterizer,
-                                NormWeightedCompositor, PerspectiveCameras,
+from pytorch3d.renderer import (NormWeightedCompositor,
                                 PointsRasterizationSettings, PointsRasterizer,
-                                PointsRenderer, RasterizationSettings)
-from pytorch3d.renderer.blending import BlendParams, hard_rgb_blend
-from pytorch3d.renderer.cameras import FoVPerspectiveCameras
-from pytorch3d.renderer.mesh.textures import TexturesVertex
-from pytorch3d.structures import Meshes, Pointclouds
+                                PointsRenderer)
+from pytorch3d.structures import Pointclouds
 
 sys.path.append('depth_anything/metric_depth/')
 
