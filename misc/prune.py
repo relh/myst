@@ -1,7 +1,40 @@
 import kornia as kn
-import open3d as o3d
 import numpy as np
+import open3d as o3d
 import torch
+from pytorch3d.ops import knn_points
+
+
+def density_pruning_torch3d(points, colors, nb_neighbors=10, std_ratio=3.0):
+    # Ensure points and colors are on the same device and in float format
+    device = points.device
+    points = points.float()
+    
+    # Add batch dimension if it's not present
+    if points.dim() == 2:
+        points = points.unsqueeze(0)
+
+    # Compute k-NN
+    knn = knn_points(points, points, K=nb_neighbors, return_sorted=False)
+
+    # Distances to k nearest neighbors
+    distances = knn.dists
+
+    # Mean and std of distances
+    mean_distances = distances.mean(dim=2)
+    std_distances = distances.std(dim=2)
+
+    # Threshold for determining outliers
+    threshold = mean_distances + std_ratio * std_distances
+
+    # Mask for non-outliers
+    non_outlier_mask = (distances.max(dim=2).values < threshold).squeeze(0)
+
+    # Apply mask to points and colors
+    pruned_points = points[0][non_outlier_mask]
+    pruned_colors = colors[non_outlier_mask]
+
+    return pruned_points, pruned_colors
 
 def density_pruning(points, colors):
     pcd = o3d.geometry.PointCloud()

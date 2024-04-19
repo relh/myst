@@ -122,7 +122,7 @@ def main():
             #pts_3d, mask_3d = realign_depth_edges(pts_3d, rgb_3d)
             mask_3d = mask
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
-            pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
+            pts_3d, rgb_3d = density_pruning_torch3d(pts_3d, rgb_3d)
 
             #da_3d, da_colors, _ = img_to_pts_3d_da(pil_img)
             #da_3d = pts_cam_to_pts_world(da_3d, extrinsics)
@@ -187,7 +187,7 @@ def main():
 
             # --- lift img to 3d ---
             new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(all_images)
-            #new_pts_3d, new_rgb_3d = density_pruning(new_pts_3d, new_rgb_3d)
+            new_pts_3d, new_rgb_3d = density_pruning_torch3d(new_pts_3d, new_rgb_3d)
             #new_pts_3d, mask_3d = realign_depth_edges(new_pts_3d, new_rgb_3d)
             #extrinsics_inv = torch.linalg.pinv(extrinsics)
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
@@ -207,7 +207,7 @@ def main():
             #rgb_3d = torch.cat((rgb_3d, new_rgb_3d), dim=0)
 
             # --- density pruning ---
-            pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
+            #pts_3d, rgb_3d = density_pruning(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
 if __name__ == "__main__":
@@ -221,12 +221,19 @@ if __name__ == "__main__":
     #with torch.no_grad():
     #with torch.autocast(device_type="cuda"):
     import cProfile
+    import io
     import pstats
 
     profiler = cProfile.Profile()
     profiler.enable()
     main()
     profiler.disable()
-    stats = pstats.Stats(profiler).sort_stats('cumtime')
-    stats.print_stats()
+    s = io.StringIO()
+    ps = pstats.Stats(profiler, stream=s)
+    ps.sort_stats('cumtime')
+
+    # Now we filter and print entries with a cumulative time greater than 0.5 seconds
+    for func in ps.fcn_list:
+        if ps.stats[func][3] > 0.5:  # index 3 is where 'cumulative time' is stored
+            print(f'{func[2]} took {ps.stats[func][3]:.2f} seconds')
     breakpoint()
