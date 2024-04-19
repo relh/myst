@@ -8,57 +8,6 @@ import torch.nn.functional as F
 from pytorch3d.ops import knn_points
 
 
-def square_calculate_dynamic_epsilon(point_cloud):
-    """
-    Calculate a dynamic epsilon based on the average distance between adjacent points in a dense point cloud.
-
-    :param point_cloud: Input point cloud as a PyTorch tensor of shape (N, 3), where N is the number of points.
-    :return: Calculated epsilon value.
-    """
-    # Assume point_cloud is reshaped to (256, 256, 3) if it comes from a 256x256 depth image
-    sq_shape = int(point_cloud.shape[0] ** 0.5)
-    reshaped_pc = point_cloud.view(sq_shape, sq_shape, 3)
-
-    # Calculate differences between adjacent points along both axes
-    diff_x = reshaped_pc[:-1, :, :] - reshaped_pc[1:, :, :]
-    diff_y = reshaped_pc[:, :-1, :] - reshaped_pc[:, 1:, :]
-
-    # Calculate distances for these differences
-    dist_x = torch.sqrt(torch.sum(diff_x**2, dim=2))
-    dist_y = torch.sqrt(torch.sum(diff_y**2, dim=2))
-
-    # Calculate average distance
-    avg_dist = torch.mean(torch.cat((dist_x.flatten(), dist_y.flatten())))
-
-    return avg_dist
-
-def slow_calculate_dynamic_epsilon(point_cloud):
-    """
-    Calculate a dynamic epsilon based on the average distance to the nearest neighbor in a point cloud.
-    
-    :param point_cloud: Input point cloud as a PyTorch tensor of shape (N, 3), where N is the number of points.
-    :return: Calculated epsilon value.
-    """
-    # Convert PyTorch tensor to numpy array
-    pc_numpy = point_cloud.cpu().numpy()
-    
-    # Convert numpy array to Open3D point cloud format
-    pc_o3d = o3d.geometry.PointCloud()
-    pc_o3d.points = o3d.utility.Vector3dVector(pc_numpy)
-    
-    # Compute the k-nearest neighbors (k=2)
-    kdtree = o3d.geometry.KDTreeFlann(pc_o3d)
-    distances = []
-    for i in range(len(pc_o3d.points)):
-        # Search for k-nearest neighbors
-        _, idx, dist = kdtree.search_knn_vector_3d(pc_o3d.points[i], 5)
-        # Append the distance to the nearest neighbor (not including itself)
-        distances.append(np.sqrt(dist[1]))
-    
-    # Compute the average of the distances
-    avg_distance = np.mean(distances)
-    return avg_distance
-
 def calculate_dynamic_epsilon(point_cloud):
     """
     Calculate a dynamic epsilon based on the average distance to the four nearest neighbors in a point cloud.
@@ -116,7 +65,7 @@ def trim_points(new_da_3d, new_da_colors, border=1):
 
     return result_points, result_colors
 
-def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=None):
+def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=5.0):
     """
     Merge two point clouds on the GPU, retaining all points from da_3d and filtering new_da_3d points based on uniqueness,
     excluding black points from new_da_3d.

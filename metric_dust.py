@@ -6,9 +6,9 @@ import sys
 
 import numpy as np
 import PIL.Image
-from PIL import Image
 import torch
 import torchvision.transforms as tvf
+from PIL import Image
 from PIL.ImageOps import exif_transpose
 
 sys.path.append('dust3r/')
