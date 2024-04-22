@@ -24,12 +24,6 @@ DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
 
 model = None
 
-def pts_cam_to_pts_world(points_camera_coord_tensor, extrinsics):
-    extrinsics_inv = torch.linalg.inv(extrinsics)
-    points_homogeneous = torch.cat((points_camera_coord_tensor, torch.ones(points_camera_coord_tensor.shape[0], 1, device=points_camera_coord_tensor.device)), dim=1)
-    points_world_coord = torch.mm(extrinsics_inv, points_homogeneous.t()).t()[:, :3]  # Apply extrinsics
-    return points_world_coord
-
 def img_to_pts_3d_da(color_image):
     global model
     if model is None:

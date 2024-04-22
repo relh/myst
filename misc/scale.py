@@ -5,6 +5,11 @@ import numpy as np
 import open3d as o3d
 import torch
 
+def pts_cam_to_pts_world(points_camera_coord_tensor, extrinsics):
+    extrinsics_inv = torch.linalg.inv(extrinsics)
+    points_homogeneous = torch.cat((points_camera_coord_tensor, torch.ones(points_camera_coord_tensor.shape[0], 1, device=points_camera_coord_tensor.device)), dim=1)
+    points_world_coord = torch.mm(extrinsics_inv, points_homogeneous.t()).t()[:, :3]  # Apply extrinsics
+    return points_world_coord
 
 def project_to_image(camera_coords, intrinsics, image_shape):
     # Projects 3D points onto a 2D image plane using the camera's extrinsic and intrinsic matrices.
@@ -91,7 +96,7 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
     )
     return icp_result
 
-def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
+def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30, align_mode='median'):
     gt_proj, mod_gt_colors, gt_3d, select_gt_3d, gt_camera = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
     new_proj, mod_new_colors, new_3d, select_new_3d, new_camera = world_to_filtered(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
 
@@ -110,7 +115,7 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     color_difference = torch.abs(gt_c_image - new_c_image).sum(dim=2)
 
     # Check if the difference is within the threshold (60) for all RGB channels
-    within_threshold = (color_difference <= 60) & valid_indices
+    within_threshold = (color_difference <= color_threshold) & valid_indices
     matches_count = within_threshold.sum()
     print(f'Number of matching colors within threshold: {matches_count}')
 
@@ -127,17 +132,12 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     extrinsics_inv = torch.linalg.pinv(extrinsics)
     scale = None
     shift = None
-    align_mode = 'median'
     if align_mode == 'median':
         diff_3d = gt_image[:, :, :] / new_image[:, :, :]
         scale = diff_3d[within_threshold].median()
         new_3d_colors = new_colors
         new_3d_scaled = new_camera
         new_3d_scaled[:, :3] *= scale
-
-        # --- for reversing extrinsics ---
-        new_3d_scaled = torch.matmul(new_3d_scaled, extrinsics_inv.T)
-        new_3d_scaled = new_3d_scaled[:, :3] / new_3d_scaled[:, 3:]
 
     elif align_mode == 'o3d':
         source = o3d.geometry.PointCloud()
@@ -157,12 +157,14 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
 
         # Apply the computed transformation to the entire source point cloud
         new_3d_scaled = o3d.geometry.PointCloud()
-        new_3d_scaled.points = o3d.utility.Vector3dVector(new_3d.cpu().numpy())
+        new_3d_scaled.points = o3d.utility.Vector3dVector(new_camera[:, :3].cpu().numpy())
         new_3d_scaled.colors = o3d.utility.Vector3dVector(new_colors.cpu().numpy())
         new_3d_scaled = new_3d_scaled.transform(icp_result.transformation)
+        breakpoint()
 
         new_3d_colors = torch.tensor(np.asarray(new_3d_scaled.colors)).to(torch.uint8).to('cuda')#[within_threshold.view(-1)]
         new_3d_scaled = torch.tensor(np.asarray(new_3d_scaled.points)).float().to('cuda')#[within_threshold.view(-1)]
+        new_3d_scaled = torch.cat((new_3d_scaled, new_camera[:, -1].unsqueeze(1)), dim=1)
 
     elif align_mode == 'lstsq':
         # TODO use original selected points here
@@ -170,6 +172,10 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
         new_3d_scaled = new_points_3d 
         new_3d_scaled[:, :3] = new_3d[:, :3] * scale + shift
         new_3d_colors = new_colors
+
+    # --- for reversing extrinsics ---
+    new_3d_scaled = torch.matmul(new_3d_scaled, extrinsics_inv.T)
+    new_3d_scaled = new_3d_scaled[:, :3] / new_3d_scaled[:, 3:]
 
     print(f'Scale: {scale}, Shift: {shift}')
     return scale, new_3d_scaled, new_3d_colors, within_threshold 

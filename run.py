@@ -13,17 +13,16 @@ import tty
 from argparse import ArgumentParser
 
 import rerun as rr  # pip install rerun-sdk
-import torch
-
 from pytorch3d.renderer import PerspectiveCameras
-from metric_depth import img_to_pts_3d_da, pts_cam_to_pts_world
+
+from metric_depth import img_to_pts_3d_da
 from metric_dust import img_to_pts_3d_dust
-from misc.inpaint import run_inpaint
-from misc.merge import merge_and_filter 
-from misc.prune import density_pruning_py3d 
-from misc.renderer import pts_3d_to_img_raster, pts_3d_to_img_py3d
-from misc.scale import project_and_scale_points 
 from misc.imutils import fill
+from misc.inpaint import run_inpaint
+from misc.merge import merge_and_filter
+from misc.prune import density_pruning_py3d
+from misc.renderer import pts_3d_to_img_py3d, pts_3d_to_img_raster
+from misc.scale import project_and_scale_points, pts_cam_to_pts_world
 from misc.supersample import run_supersample
 
 
@@ -87,7 +86,6 @@ def main():
 
     pts_3d = None
     image = None
-    mask = None
     extrinsics = None
     all_images = []
     intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
@@ -97,7 +95,6 @@ def main():
     idx = 0
     while True:
         idx += 1
-
         # --- setup initial scene ---
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
@@ -107,7 +104,7 @@ def main():
 
             all_images.insert(0, image)
         else:
-            image = torch.tensor(wombo_img).to(torch.uint8)
+            image = wombo_img.to(torch.uint8)
             mask = image.sum(dim=2) < 10
             image[mask] = 0.0
 
@@ -122,7 +119,6 @@ def main():
         if pts_3d is None: 
             pts_3d, rgb_3d, focals = img_to_pts_3d_dust(all_images)
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
-
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             if focals is not None:
@@ -203,36 +199,39 @@ def main():
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
 
             # --- re-aligns two point clouds with partial overlap ---
-            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(imsize, imsize))
+            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, 
+                                                                          image_shape=(imsize, imsize), 
+                                                                          color_threshold=30, 
+                                                                          align_mode='o3d')
 
             # --- merge and filtering new point cloud ---
             pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
     rr.script_teardown(args)
 
 if __name__ == "__main__":
-    # load an input image
-    # estimate depth
-    # use COLMAP to DA scale factor
-    # lift to 3D point cloud
-    # apply delta extrinsics from EF using nearest neighbors
-    # re-render new image with mask
-    # in paint black with diffusion
-    #with torch.no_grad():
-    #with torch.autocast(device_type="cuda"):
+    # --- procedure
+    # 1. load an input image
+    # 2. estimate depth
+    # 3. use dust3r to lift to 3D point cloud 
+    # 4. move around and apply delta extrinsics
+    # 5. re-render new image with mask
+    # 6. in paint black with diffusion
+
     import cProfile
     import io
     import pstats
+    with torch.no_grad():
+        #with torch.autocast(device_type="cuda"):
+        profiler = cProfile.Profile()
+        profiler.enable()
+        main()
+        profiler.disable()
+        s = io.StringIO()
+        ps = pstats.Stats(profiler, stream=s)
+        ps.sort_stats('cumtime')
 
-    profiler = cProfile.Profile()
-    profiler.enable()
-    main()
-    profiler.disable()
-    s = io.StringIO()
-    ps = pstats.Stats(profiler, stream=s)
-    ps.sort_stats('cumtime')
-
-    # Now we filter and print entries with a cumulative time greater than 0.5 seconds
-    for func in ps.fcn_list:
-        if ps.stats[func][3] > 0.5:  # index 3 is where 'cumulative time' is stored
-            print(f'{func[2]} took {ps.stats[func][3]:.2f} seconds')
-    breakpoint()
+        # Now we filter and print entries with a cumulative time greater than 0.5 seconds
+        for func in ps.fcn_list:
+            if ps.stats[func][3] > 0.5:  # index 3 is where 'cumulative time' is stored
+                print(f'{func[2]} took {ps.stats[func][3]:.2f} seconds')
+        #breakpoint()
