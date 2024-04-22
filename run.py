@@ -76,7 +76,7 @@ def main():
     # --- setup rerun args ---
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
-    parser.add_argument('--depth', type=str, default='dust', help='da / dust')
+    parser.add_argument('--depth', type=str, default='da', help='da / dust')
     parser.add_argument('--renderer', type=str, default='raster', help='raster / py3d')
     parser.add_argument('--dust3r', type=str, default='single', help='joint / single')
     args = parser.parse_args()
@@ -118,6 +118,11 @@ def main():
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, intrinsics = img_to_pts_3d(all_images, joint=args.dust3r)
+
+            if intrinsics is None:
+                intrinsics = torch.tensor([[715.0873, 0, 256.],\
+                                           [0, 715.0873, 256.],\
+                                           [0, 0, 1.0]]).float().cuda()
             print(intrinsics)
             pts_3d = pts_cam_to_world(pts_3d, extrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
@@ -189,9 +194,8 @@ def main():
             n_pts_3d, n_rgb_3d, _ = img_to_pts_3d(all_images, joint=args.dust3r)
             #print(cameras.focal_length)
             #cameras.focal_length = -(torch.tensor((intrinsics[0, 0], intrinsics[1, 1])).unsqueeze(0).cuda())
-
-            n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
             n_pts_3d = pts_cam_to_world(n_pts_3d, extrinsics)
+            n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
 
             # --- re-aligns two point clouds with partial overlap ---
             #n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 

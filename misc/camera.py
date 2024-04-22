@@ -20,9 +20,9 @@ def pts_world_to_cam(pts_3d, extrinsics):
     return pts_cam.T
 
 def pts_cam_to_world(pts_cam, extrinsics):
-    extrinsics_inv = torch.linalg.inv(extrinsics)
-    points_homogeneous = torch.cat((pts_cam, torch.ones(pts_cam.shape[0], 1, device=pts_cam.device)), dim=1)
-    pts_3d = torch.mm(extrinsics_inv, points_homogeneous.t())
+    extrinsics_inv = torch.linalg.pinv(extrinsics)
+    pts_homo = torch.cat((pts_cam, torch.ones(pts_cam.shape[0], 1, device=pts_cam.device)), dim=1).T
+    pts_3d = extrinsics_inv @ pts_homo 
     pts_3d = pts_3d[:3] / pts_3d[-1]
     return pts_3d.T 
 

@@ -24,15 +24,18 @@ DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
 
 model = None
 
-def img_to_pts_3d_da(color_image):
+def img_to_pts_3d_da(color_image, joint=None):
     global model
     if model is None:
         config = get_config('zoedepth', "eval", DATASET)
         config.pretrained_resource = 'local::./checkpoints/depth_anything_metric_depth_indoor.pt'
         model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
         model.eval()
+    original_width, original_height = 512, 512
     #color_image = Image.open(image_path).convert('RGB')
-    original_width, original_height = color_image.size
+    color_image = color_image[0]
+    #original_width, original_height = color_image.size()
+    color_image = Image.fromarray(color_image.cpu().numpy())
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
 
     pred = model(image_tensor, dataset=DATASET)
