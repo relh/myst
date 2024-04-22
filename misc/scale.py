@@ -4,31 +4,7 @@
 import numpy as np
 import open3d as o3d
 import torch
-
-def pts_cam_to_pts_world(points_camera_coord_tensor, extrinsics):
-    extrinsics_inv = torch.linalg.inv(extrinsics)
-    points_homogeneous = torch.cat((points_camera_coord_tensor, torch.ones(points_camera_coord_tensor.shape[0], 1, device=points_camera_coord_tensor.device)), dim=1)
-    points_world_coord = torch.mm(extrinsics_inv, points_homogeneous.t()).t()[:, :3]  # Apply extrinsics
-    return points_world_coord
-
-def project_to_image(camera_coords, intrinsics, image_shape):
-    # Projects 3D points onto a 2D image plane using the camera's extrinsic and intrinsic matrices.
-    proj_pts = intrinsics @ camera_coords[:3, :]
-    im_proj_pts = proj_pts[:2] / proj_pts[2]
-    x_pixels, y_pixels = torch.round(im_proj_pts).long()
-    valid_mask = (x_pixels >= 0) & (x_pixels < image_shape[1]) &\
-                 (y_pixels >= 0) & (y_pixels < image_shape[0]) &\
-                 (camera_coords[2, :] > 0.0)
-    return torch.stack([x_pixels[valid_mask], y_pixels[valid_mask]], dim=1), torch.arange(camera_coords.shape[-1], device=camera_coords.device)[valid_mask]
-
-def world_to_filtered(points_3d, colors, intrinsics, extrinsics, image_shape):
-    camera_coords = extrinsics @ torch.cat((points_3d.clone(), torch.ones((points_3d.shape[0], 1), device=points_3d.device)), dim=1).T
-    proj, indices = project_to_image(camera_coords, intrinsics, image_shape)
-    proj, unique_indices = torch.unique(proj, dim=0, return_inverse=True)
-    colors = colors[indices][unique_indices].float()
-    pts_3d = camera_coords.T[indices][unique_indices][:, :3]
-    proj = proj[unique_indices]
-    return proj, colors, points_3d, pts_3d, camera_coords.T
+from misc.camera import pts_cam_to_pts_world, project_to_image, world_to_filtered 
 
 def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     """
