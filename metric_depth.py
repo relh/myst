@@ -24,7 +24,7 @@ DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
 
 model = None
 
-def img_to_pts_3d_da(color_image, joint=None):
+def img_to_pts_3d_da(color_image, views=None):
     global model
     if model is None:
         config = get_config('zoedepth', "eval", DATASET)

@@ -66,18 +66,16 @@ def load_images(color_image, size, square_ok=True):
     return imgs
 
 
-def img_to_pts_3d_dust(color_image, joint):
+def img_to_pts_3d_dust(color_image, views='single'):
     global dust_model
     device = 'cuda'
     batch_size = 1
-    get_intrinsics = False 
     if dust_model is None:
         model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
         dust_model = load_model(model_path, device)
-        get_intrinsics = True
 
     # --- whether to standalone use this image or not ---
-    if joint:
+    if views == 'multi':
         color_image = [Image.fromarray(image.cpu().numpy()) for image in color_image]
     else:
         color_image = [[Image.fromarray(image.cpu().numpy()) for image in color_image][0]]
@@ -90,7 +88,7 @@ def img_to_pts_3d_dust(color_image, joint):
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
-    if joint:
+    if views == 'multi':
         loss = None
         if len(color_image) > 2:
             loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
@@ -103,15 +101,13 @@ def img_to_pts_3d_dust(color_image, joint):
     #confidence_masks = scene.get_masks()
 
     # --- find focal length ---
-    intrinsics = None
-    if get_intrinsics:
-        #focals = scene.get_focals()[0]
-        intrinsics = scene.get_intrinsics()[0].float().cuda()
-        #scene.get_im_poses()
+    #focals = scene.get_focals()[0]
+    intrinsics = scene.get_intrinsics()[0].float().cuda()
+    #scene.get_im_poses()
 
     rgb_3d = torch.tensor(np.asarray(color_image[0])).to(torch.uint8).to(device)
     return pts_3d.reshape(-1, 3) * 1000.0, \
-           rgb_3d.reshape(-1, 3), intrinsics
+           rgb_3d.reshape(-1, 3), intrinsics 
 
 if __name__ == '__main__':
     model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"

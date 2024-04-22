@@ -76,9 +76,9 @@ def main():
     # --- setup rerun args ---
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
-    parser.add_argument('--depth', type=str, default='da', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='raster', help='raster / py3d')
-    parser.add_argument('--dust3r', type=str, default='single', help='joint / single')
+    parser.add_argument('--depth', type=str, default='dust', help='da / dust')
+    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
+    parser.add_argument('--views', type=str, default='single', help='multi / single')
     args = parser.parse_args()
     rr.script_setup(args, "15myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
@@ -117,15 +117,14 @@ def main():
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, intrinsics = img_to_pts_3d(all_images, joint=args.dust3r)
-
-            if intrinsics is None:
-                intrinsics = torch.tensor([[715.0873, 0, 256.],\
-                                           [0, 715.0873, 256.],\
-                                           [0, 0, 1.0]]).float().cuda()
-            print(intrinsics)
+            pts_3d, rgb_3d, intrinsics = img_to_pts_3d(all_images, views=args.views)
             pts_3d = pts_cam_to_world(pts_3d, extrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+
+            if intrinsics is None:
+                intrinsics = torch.tensor([[256., 0, 256.],\
+                                           [0, 256., 256.],\
+                                           [0, 0, 1.0]]).float().cuda()
 
             if args.renderer != 'raster':
                 cameras = PerspectiveCameras(
@@ -191,7 +190,7 @@ def main():
             all_images.insert(0, wombo_img)
 
             # --- lift img to 3d ---
-            n_pts_3d, n_rgb_3d, _ = img_to_pts_3d(all_images, joint=args.dust3r)
+            n_pts_3d, n_rgb_3d, _ = img_to_pts_3d(all_images, views=args.views)
             #print(cameras.focal_length)
             #cameras.focal_length = -(torch.tensor((intrinsics[0, 0], intrinsics[1, 1])).unsqueeze(0).cuda())
             n_pts_3d = pts_cam_to_world(n_pts_3d, extrinsics)
