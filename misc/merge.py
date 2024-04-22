@@ -99,7 +99,7 @@ def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=5.0):
     all_new_keys = torch.cat((original_keys, new_keys_filtered), dim=0)
 
     # Find unique new keys
-    unique_vals, unique_inverse = torch.unique(all_new_keys, return_inverse=True, dim=0)
+    unique_vals, unique_inverse = torch.unique(all_new_keys, sorted=False, return_inverse=True, dim=0)
     torch.bincount(unique_inverse)
 
     # Identify first occurrences of unique keys as valid, plus all from original

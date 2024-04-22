@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 import torch
-from misc.camera import pts_cam_to_pts_world, project_to_image, world_to_filtered 
+
+from misc.camera import project_to_image, pts_cam_to_world, pts_world_to_unique
+
 
 def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     """
@@ -73,16 +76,18 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
     return icp_result
 
 def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30, align_mode='median'):
-    gt_proj, mod_gt_colors, gt_3d, select_gt_3d, gt_camera = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
-    new_proj, mod_new_colors, new_3d, select_new_3d, new_camera = world_to_filtered(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
+    gt_proj, mod_gt_colors, gt_3d, select_gt_3d, gt_camera = pts_world_to_unique(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
+    new_proj, mod_new_colors, new_3d, select_new_3d, new_camera = pts_world_to_unique(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
 
     # Initialize two tensors filled with -1 (indicating empty/invalid)
     gt_c_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
     new_c_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
 
     # Fill the tensors with the RGB colors at the specified coordinates
-    gt_c_image[gt_proj[:, 1], gt_proj[:, 0]] = mod_gt_colors
-    new_c_image[new_proj[:, 1], new_proj[:, 0]] = mod_new_colors
+    gt_c_image[gt_proj[:, 0], gt_proj[:, 1]] = mod_gt_colors
+    new_c_image[new_proj[:, 0], new_proj[:, 1]] = mod_new_colors
+    gt_c_image = gt_c_image.permute(1, 0, 2)
+    new_c_image = new_c_image.permute(1, 0, 2)
 
     # Find indices where both tensors have valid (non-empty) colors
     valid_indices = ((gt_c_image != -1) & (new_c_image != -1)).all(dim=2)  # Both have valid RGB colors
@@ -102,8 +107,11 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     gt_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
     new_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
 
-    gt_image[gt_proj[:, 1], gt_proj[:, 0]] = select_gt_3d
-    new_image[new_proj[:, 1], new_proj[:, 0]] = select_new_3d
+    gt_image[gt_proj[:, 0], gt_proj[:, 1]] = select_gt_3d
+    new_image[new_proj[:, 0], new_proj[:, 1]] = select_new_3d
+
+    plt.imshow(gt_c_image.cpu().numpy() / 255.0); plt.show()
+    breakpoint()
 
     extrinsics_inv = torch.linalg.pinv(extrinsics)
     scale = None
@@ -136,7 +144,7 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
         new_3d_scaled.points = o3d.utility.Vector3dVector(new_camera[:, :3].cpu().numpy())
         new_3d_scaled.colors = o3d.utility.Vector3dVector(new_colors.cpu().numpy())
         new_3d_scaled = new_3d_scaled.transform(icp_result.transformation)
-        #breakpoint()
+        breakpoint()
 
         new_3d_colors = torch.tensor(np.asarray(new_3d_scaled.colors)).to(torch.uint8).to('cuda')#[within_threshold.view(-1)]
         new_3d_scaled = torch.tensor(np.asarray(new_3d_scaled.points)).float().to('cuda')#[within_threshold.view(-1)]

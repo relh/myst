@@ -17,7 +17,7 @@ from pytorch3d.renderer import PerspectiveCameras
 
 from metric_depth import img_to_pts_3d_da
 from metric_dust import img_to_pts_3d_dust
-from misc.camera import pts_cam_to_pts_world, pts_3d_to_img_raster
+from misc.camera import pts_3d_to_img_raster, pts_cam_to_world
 from misc.imutils import fill
 from misc.inpaint import run_inpaint
 from misc.merge import merge_and_filter
@@ -119,7 +119,7 @@ def main():
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, focals = img_to_pts_3d_dust(all_images)
-            pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
+            pts_3d = pts_cam_to_world(pts_3d, extrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             if focals is not None:
@@ -197,7 +197,7 @@ def main():
             # --- lift img to 3d ---
             n_pts_3d, n_rgb_3d, _ = img_to_pts_3d_dust(all_images)
             n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
-            n_pts_3d = pts_cam_to_pts_world(n_pts_3d, extrinsics)
+            n_pts_3d = pts_cam_to_world(n_pts_3d, extrinsics)
 
             # --- re-aligns two point clouds with partial overlap ---
             n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
