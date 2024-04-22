@@ -91,7 +91,7 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
     )
     return icp_result
 
-def project_and_scale_points_with_color(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
+def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30):
     gt_proj, mod_gt_colors, gt_3d, select_gt_3d, gt_camera = world_to_filtered(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
     new_proj, mod_new_colors, new_3d, select_new_3d, new_camera = world_to_filtered(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
 

@@ -16,36 +16,10 @@ sys.path.append('dust3r/')
 from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 from dust3r.image_pairs import make_pairs
 from dust3r.inference import inference, load_model
+from misc.supersample import supersample_point_cloud
 
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 dust_model = None
-
-def supersample_point_cloud(point_cloud):
-    """
-    Supersample a point cloud by interpolating points between adjacent points in both x and y directions.
-
-    :param point_cloud: Input point cloud as a PyTorch tensor of shape (height, width, 3).
-    :return: Supersampled point cloud.
-    """
-    height, width, _ = point_cloud.shape
-    
-    # Interpolate along x-axis
-    interpolated_x = (point_cloud[:, :-1, :] + point_cloud[:, 1:, :]) / 2
-    
-    # Concatenate the original and the interpolated points along x-axis
-    supersampled_x = torch.empty(height, 2 * width - 1, 3)
-    supersampled_x[:, 0::2, :] = point_cloud
-    supersampled_x[:, 1::2, :] = interpolated_x
-
-    # Interpolate along y-axis
-    interpolated_y = (supersampled_x[:-1, :, :] + supersampled_x[1:, :, :]) / 2
-    
-    # Concatenate the original and the interpolated points along y-axis
-    supersampled_xy = torch.empty(2 * height - 1, 2 * width - 1, 3)
-    supersampled_xy[0::2, :, :] = supersampled_x
-    supersampled_xy[1::2, :, :] = interpolated_y
-
-    return supersampled_xy.to('cuda')
 
 def _resize_pil_image(img, long_edge_size):
     S = max(img.size)
@@ -135,15 +109,7 @@ def img_to_pts_3d_dust(color_image):
         focals = scene.get_focals()[0]
         #scene.get_im_poses()[0]
 
-    supersample = False 
-    if supersample:
-        pts_3d = supersample_point_cloud(pts_3d.to(device))
-
-        rgb_3d = torch.tensor(np.asarray(color_image[0])).float().to(device)
-        rgb_3d = supersample_point_cloud(rgb_3d).to(torch.uint8)
-    else:
-        rgb_3d = torch.tensor(np.asarray(color_image[0])).to(torch.uint8).to(device)
-
+    rgb_3d = torch.tensor(np.asarray(color_image[0])).to(torch.uint8).to(device)
     return pts_3d.reshape(-1, 3) * 1000.0, \
            rgb_3d.reshape(-1, 3), focals
 

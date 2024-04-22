@@ -19,11 +19,11 @@ from pytorch3d.renderer import PerspectiveCameras
 from metric_depth import img_to_pts_3d_da, pts_cam_to_pts_world
 from metric_dust import img_to_pts_3d_dust
 from misc.inpaint import run_inpaint
-from misc.merge import *
-from misc.prune import *
-from misc.renderer import *
-from misc.scale import *
-from misc.utils import *
+from misc.merge import merge_and_filter 
+from misc.prune import density_pruning_py3d 
+from misc.renderer import pts_3d_to_img_raster, pts_3d_to_img_py3d
+from misc.scale import project_and_scale_points 
+from misc.imutils import fill
 from misc.supersample import run_supersample
 
 
@@ -85,21 +85,15 @@ def main():
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    supersample = True
     pts_3d = None
     image = None
     mask = None
     extrinsics = None
     all_images = []
-    if supersample == True:
-        intrinsics = torch.tensor([[512.0*1.0, 0.0000, 512.0000],
-                                   [0.0000, 512.0*1.0, 512.0000],
-                                   [0.0000, 0.000, 1.0000]]).cuda()
-    else:
-        intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
-                                   [0.0000, 256.0*1.0, 256.0000],
-                                   [0.0000, 0.000, 1.0000]]).cuda()
-    imsize = 1024. if supersample else 512.
+    intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
+                               [0.0000, 256.0*1.0, 256.0000],
+                               [0.0000, 0.000, 1.0000]]).cuda()
+    imsize = 512.
     idx = 0
     while True:
         idx += 1
@@ -117,9 +111,6 @@ def main():
             mask = image.sum(dim=2) < 10
             image[mask] = 0.0
 
-        if supersample:
-            image = run_supersample(image, mask, prompt)
-
         # --- establish orientation ---
         if extrinsics == None:
             extrinsics = torch.tensor([[1, 0, 0, 0],
@@ -131,7 +122,8 @@ def main():
         if pts_3d is None: 
             pts_3d, rgb_3d, focals = img_to_pts_3d_dust(all_images)
             pts_3d = pts_cam_to_pts_world(pts_3d, extrinsics)
-            pts_3d, rgb_3d = density_pruning_torch3d(pts_3d, rgb_3d)
+
+            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             if focals is not None:
                 intrinsics[0, 0] = focals
@@ -164,7 +156,7 @@ def main():
         # --- get user input ---
         infill = False
         inpaint = False
-        print("press (w, a, s, d, q, e) move, (f)ill, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
+        print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
         user_input = get_keypress()
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             extrinsics = move_camera(extrinsics, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
@@ -174,6 +166,13 @@ def main():
             #wombo_img = fill(image_t)      # blur points to make a smooth image
             #infill = True
             inpaint = True
+        elif user_input.lower() == 'u':
+            print(f"{user_input} --> upsample...")
+            breakpoint()
+            pts_3d = supersample_point_cloud(pts_3d.to(device))
+            image = run_supersample(image, mask, prompt)
+            rgb_3d = torch.tensor(np.asarray(color_image[0])).float().to(device)
+            rgb_3d = supersample_point_cloud(rgb_3d).to(torch.uint8)
         elif user_input.lower() == 'k':
             print(f"{user_input} --> kill...")
             break
@@ -198,15 +197,13 @@ def main():
             all_images.insert(0, sq_init)
 
         if inpaint or infill:
-            #pil_img = Image.fromarray(wombo_img.to(torch.uint8).cpu().numpy())
-
             # --- lift img to 3d ---
             new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(all_images)
-            new_pts_3d, new_rgb_3d = density_pruning_torch3d(new_pts_3d, new_rgb_3d)
+            new_pts_3d, new_rgb_3d = density_pruning_py3d(new_pts_3d, new_rgb_3d)
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
 
             # --- re-aligns two point clouds with partial overlap ---
-            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(imsize, imsize))
+            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(imsize, imsize))
 
             # --- merge and filtering new point cloud ---
             pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)

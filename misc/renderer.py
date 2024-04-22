@@ -14,6 +14,8 @@ sys.path.append('depth_anything/metric_depth/')
 
 
 def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras):
+    image_shape = (int(image_shape[0]), int(image_shape[1]))
+
     points_3d = torch.cat((points_3d.clone(), torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
     points_3d_trans = extrinsics @ points_3d
     
@@ -36,6 +38,8 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
 
 
 def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape):
+    image_shape = (int(image_shape[0]), int(image_shape[1]))
+
     points_homogeneous = torch.cat((points_3d, torch.ones(points_3d.shape[0], 1, device=points_3d.device)), dim=1).T
     camera_coords = extrinsics @ points_homogeneous
     proj_pts = intrinsics @ camera_coords[:3, :]
