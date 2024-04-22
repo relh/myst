@@ -111,7 +111,9 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
 
     #plt.imshow(gt_c_image.cpu().numpy() / 255.0); plt.show()
 
-    extrinsics_inv = torch.linalg.pinv(extrinsics)
+    # TODO this is broken because the intrinsics are wrong so the "corresponding" points 
+    # are no longer "corresponding"
+
     scale = None
     shift = None
     if align_mode == 'median':
@@ -157,9 +159,8 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
         new_3d_scaled = new_camera
         new_3d_colors = new_colors
 
-    # --- for reversing extrinsics ---
-    new_3d_scaled = torch.matmul(new_3d_scaled, extrinsics_inv.T)
-    new_3d_scaled = new_3d_scaled[:, :3] / new_3d_scaled[:, 3:]
+    # --- from cam -> world ---
+    new_3d_scaled = pts_cam_to_world(new_3d_scaled, extrinsics)
 
     print(f'Scale: {scale}, Shift: {shift}')
     return new_3d_scaled, new_3d_colors, within_threshold 

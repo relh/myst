@@ -197,10 +197,10 @@ def main():
             n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
 
             # --- re-aligns two point clouds with partial overlap ---
-            #n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
-            #                                                       image_shape=(imsize, imsize),
-            #                                                       color_threshold=30,
-            #                                                       align_mode='None')
+            n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
+                                                                   image_shape=(imsize, imsize),
+                                                                   color_threshold=30,
+                                                                   align_mode='median')
 
             # --- merge and filtering new point cloud ---
             #pts_3d, rgb_3d = merge_and_filter(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d)

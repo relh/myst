@@ -33,10 +33,11 @@ def pts_cam_to_proj(pts_cam, intrinsics):
 def project_to_image(camera_coords, intrinsics, image_shape):
     # Projects 3D points onto a 2D image plane using the camera's extrinsic and intrinsic matrices.
     im_proj_pts = pts_cam_to_proj(camera_coords, intrinsics)
-    x_pixels, y_pixels = torch.round(im_proj_pts).long()
+    im_proj_pts = torch.round(im_proj_pts).long()
+    x_pixels, y_pixels = im_proj_pts[:, 0], im_proj_pts[:, 1]
     visible = (x_pixels >= 0) & (x_pixels < image_shape[1]) &\
               (y_pixels >= 0) & (y_pixels < image_shape[0]) &\
-              (camera_coords[2, :] > 0.0)
+              (camera_coords[:, 2] > 0.0)
     return torch.stack([x_pixels[visible], y_pixels[visible]], dim=1), visible
 
 def pts_world_to_unique(pts_3d, colors, intrinsics, extrinsics, image_shape):
@@ -44,9 +45,9 @@ def pts_world_to_unique(pts_3d, colors, intrinsics, extrinsics, image_shape):
     proj, visible = project_to_image(camera_coords, intrinsics, image_shape)
     #proj, inverse_indices = torch.unique(proj, dim=0, sorted=False, return_inverse=True)
     colors = colors[visible].float() #[inverse_indices].float()
-    pts_cam = camera_coords.T[visible][:, :3].float() #[inverse_indices][:, :3]
+    pts_cam = camera_coords[visible][:, :3].float() #[inverse_indices][:, :3]
     proj = proj#[inverse_indices]
-    return proj, colors, pts_3d, pts_cam, camera_coords.T
+    return proj, colors, pts_3d, pts_cam, camera_coords
 
 def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape, cameras=None):
     image_shape = (int(image_shape[0]), int(image_shape[1]))
