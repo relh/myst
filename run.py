@@ -195,22 +195,22 @@ def main():
 
         if inpaint or infill:
             # --- lift img to 3d ---
-            new_pts_3d, new_rgb_3d, _ = img_to_pts_3d_dust(all_images)
-            new_pts_3d, new_rgb_3d = density_pruning_py3d(new_pts_3d, new_rgb_3d)
-            new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
+            n_pts_3d, n_rgb_3d, _ = img_to_pts_3d_dust(all_images)
+            n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
+            n_pts_3d = pts_cam_to_pts_world(n_pts_3d, extrinsics)
 
             # --- re-aligns two point clouds with partial overlap ---
-            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, 
-                                                                          image_shape=(imsize, imsize), 
-                                                                          color_threshold=30, 
-                                                                          align_mode='o3d')
+            n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
+                                                                   image_shape=(imsize, imsize), 
+                                                                   color_threshold=60, 
+                                                                   align_mode='o3d')
 
             # --- merge and filtering new point cloud ---
-            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
+            pts_3d, rgb_3d = merge_and_filter(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d)
     rr.script_teardown(args)
 
 if __name__ == "__main__":
-    # --- procedure
+    # --- procedure ---
     # 1. load an input image
     # 2. estimate depth
     # 3. use dust3r to lift to 3D point cloud 

@@ -128,7 +128,7 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
 
         # Align the point clouds based on the corresponding parts
         icp_result = align_partial_point_clouds(
-            source, target, o3d_indices, o3d_indices, threshold=0.5)
+            source, target, o3d_indices, o3d_indices, threshold=50.)
         scale = shift = icp_result.transformation
 
         # Apply the computed transformation to the entire source point cloud
@@ -136,7 +136,7 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
         new_3d_scaled.points = o3d.utility.Vector3dVector(new_camera[:, :3].cpu().numpy())
         new_3d_scaled.colors = o3d.utility.Vector3dVector(new_colors.cpu().numpy())
         new_3d_scaled = new_3d_scaled.transform(icp_result.transformation)
-        breakpoint()
+        #breakpoint()
 
         new_3d_colors = torch.tensor(np.asarray(new_3d_scaled.colors)).to(torch.uint8).to('cuda')#[within_threshold.view(-1)]
         new_3d_scaled = torch.tensor(np.asarray(new_3d_scaled.points)).float().to('cuda')#[within_threshold.view(-1)]
@@ -154,4 +154,4 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     new_3d_scaled = new_3d_scaled[:, :3] / new_3d_scaled[:, 3:]
 
     print(f'Scale: {scale}, Shift: {shift}')
-    return scale, new_3d_scaled, new_3d_colors, within_threshold 
+    return new_3d_scaled, new_3d_colors, within_threshold 
