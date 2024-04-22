@@ -135,7 +135,7 @@ def img_to_pts_3d_dust(color_image):
         focals = scene.get_focals()[0]
         #scene.get_im_poses()[0]
 
-    supersample = True
+    supersample = False 
     if supersample:
         pts_3d = supersample_point_cloud(pts_3d.to(device))
 

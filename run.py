@@ -15,6 +15,7 @@ from argparse import ArgumentParser
 import rerun as rr  # pip install rerun-sdk
 import torch
 
+from pytorch3d.renderer import PerspectiveCameras
 from metric_depth import img_to_pts_3d_da, pts_cam_to_pts_world
 from metric_dust import img_to_pts_3d_dust
 from misc.inpaint import run_inpaint
@@ -23,6 +24,7 @@ from misc.prune import *
 from misc.renderer import *
 from misc.scale import *
 from misc.utils import *
+from misc.supersample import run_supersample
 
 
 def get_keypress():
@@ -83,14 +85,21 @@ def main():
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
+    supersample = True
     pts_3d = None
     image = None
     mask = None
     extrinsics = None
     all_images = []
-    intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
-                               [0.0000, 256.0*1.0, 256.0000],
-                               [0.0000, 0.000, 1.0000]]).cuda()
+    if supersample == True:
+        intrinsics = torch.tensor([[512.0*1.0, 0.0000, 512.0000],
+                                   [0.0000, 512.0*1.0, 512.0000],
+                                   [0.0000, 0.000, 1.0000]]).cuda()
+    else:
+        intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
+                                   [0.0000, 256.0*1.0, 256.0000],
+                                   [0.0000, 0.000, 1.0000]]).cuda()
+    imsize = 1024. if supersample else 512.
     idx = 0
     while True:
         idx += 1
@@ -107,6 +116,9 @@ def main():
             image = torch.tensor(wombo_img).to(torch.uint8)
             mask = image.sum(dim=2) < 10
             image[mask] = 0.0
+
+        if supersample:
+            image = run_supersample(image, mask, prompt)
 
         # --- establish orientation ---
         if extrinsics == None:
@@ -134,7 +146,7 @@ def main():
                         T=torch.zeros(1, 3),
                         focal_length=-intrinsics[0,0].unsqueeze(0),
                         principal_point=intrinsics[:2,2].unsqueeze(0),
-                        image_size=torch.ones(1, 2) * 512,
+                        image_size=torch.ones(1, 2) * imsize,
                     )
 
         # --- rerun logging --- 
@@ -144,9 +156,9 @@ def main():
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
                            mat3x3=extrinsics[:3, :3].cpu().numpy(), from_parent=True))
         inpy = intrinsics.cpu().numpy()
-        rr.log("world/camera/image", rr.Pinhole(resolution=[512., 512.], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
+        rr.log("world/camera/image", rr.Pinhole(resolution=[imsize, imsize], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/image", rr.Image(image.cpu().numpy()).compress(jpeg_quality=75))
-        rr.log("world/camera/mask", rr.Pinhole(resolution=[512., 512.], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
+        rr.log("world/camera/mask", rr.Pinhole(resolution=[imsize, imsize], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/mask", rr.Image((torch.stack([mask_3d, mask_3d, mask_3d], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
         # --- get user input ---
@@ -173,7 +185,7 @@ def main():
             inpaint = True
 
         # --- turn 3d points to image ---
-        wombo_img = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (512, 512), cameras)
+        wombo_img = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (imsize, imsize), cameras)
 
         # --- sideways pipeline ---
         if inpaint: 
@@ -194,7 +206,7 @@ def main():
             new_pts_3d = pts_cam_to_pts_world(new_pts_3d, extrinsics)
 
             # --- re-aligns two point clouds with partial overlap ---
-            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(512, 512))
+            _, new_pts_3d, new_rgb_3d, mask_3d = project_and_scale_points_with_color(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, intrinsics, extrinsics, image_shape=(imsize, imsize))
 
             # --- merge and filtering new point cloud ---
             pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
