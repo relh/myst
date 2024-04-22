@@ -13,7 +13,7 @@ import tty
 from argparse import ArgumentParser
 
 import rerun as rr  # pip install rerun-sdk
-from pytorch3d.renderer import PerspectiveCameras
+from pytorch3d.renderer import PerspectiveCameras, OrthographicCameras
 
 from metric_depth import img_to_pts_3d_da
 from metric_dust import img_to_pts_3d_dust
@@ -77,7 +77,8 @@ def main():
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
+    parser.add_argument('--renderer', type=str, default='raster', help='raster / py3d')
+    parser.add_argument('--dust3r', type=str, default='single', help='joint / single')
     args = parser.parse_args()
     rr.script_setup(args, "15myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
@@ -85,13 +86,11 @@ def main():
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
+    cameras = None
     pts_3d = None
     image = None
     extrinsics = None
     all_images = []
-    intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
-                               [0.0000, 256.0*1.0, 256.0000],
-                               [0.0000, 0.000, 1.0000]]).cuda()
     imsize = 512.
     idx = 0
     while True:
@@ -118,25 +117,21 @@ def main():
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, focals = img_to_pts_3d_dust(all_images)
+            pts_3d, rgb_3d, intrinsics = img_to_pts_3d(all_images, joint=args.dust3r)
+            print(intrinsics)
             pts_3d = pts_cam_to_world(pts_3d, extrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
-            if focals is not None:
-                intrinsics[0, 0] = focals
-                intrinsics[1, 1] = focals
-                print(intrinsics)
-
-                if args.renderer != 'raster':
-                    cameras = PerspectiveCameras(
-                        device='cuda',
-                        R=torch.eye(3).unsqueeze(0),
-                        in_ndc=False,
-                        T=torch.zeros(1, 3),
-                        focal_length=-intrinsics[0,0].unsqueeze(0),
-                        principal_point=intrinsics[:2,2].unsqueeze(0),
-                        image_size=torch.ones(1, 2) * imsize,
-                    )
+            if args.renderer != 'raster':
+                cameras = PerspectiveCameras(
+                    device='cuda',
+                    R=torch.eye(3).unsqueeze(0),
+                    in_ndc=False,
+                    T=torch.zeros(1, 3),
+                    focal_length=-intrinsics[0,0].unsqueeze(0),
+                    principal_point=intrinsics[:2,2].unsqueeze(0),
+                    image_size=torch.ones(1, 2) * imsize,
+                )
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
@@ -151,7 +146,6 @@ def main():
         rr.log("world/camera/mask", rr.Image((torch.stack([mask_3d, mask_3d, mask_3d], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
         # --- get user input ---
-        infill = False
         inpaint = False
         print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
         user_input = get_keypress()
@@ -160,8 +154,6 @@ def main():
             print(f"{user_input} --> camera moved/rotated, extrinsics:\n", extrinsics)
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
-            #wombo_img = fill(image_t)      # blur points to make a smooth image
-            #infill = True
             inpaint = True
         elif user_input.lower() == 'u':
             print(f"{user_input} --> upsample...")
@@ -183,30 +175,34 @@ def main():
         # --- turn 3d points to image ---
         wombo_img = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (imsize, imsize), cameras)
 
-        # --- sideways pipeline ---
         if inpaint: 
+            # --- inpaint pipeline ---
             wombo_img = fill(wombo_img)      # blur points to make a smooth image
             mask = wombo_img.sum(dim=2) < 10
             wombo_img[mask] = -1.0
             sq_init = run_inpaint(wombo_img, mask.float(), prompt=prompt)
             wombo_img = wombo_img.to(torch.uint8)
             wombo_img[mask] = sq_init[mask]
-            all_images.insert(0, sq_init)
+            all_images.insert(0, wombo_img)
 
-        if inpaint or infill:
             # --- lift img to 3d ---
-            n_pts_3d, n_rgb_3d, _ = img_to_pts_3d_dust(all_images)
+            n_pts_3d, n_rgb_3d, _ = img_to_pts_3d(all_images, joint=args.dust3r)
+            #print(cameras.focal_length)
+            #cameras.focal_length = -(torch.tensor((intrinsics[0, 0], intrinsics[1, 1])).unsqueeze(0).cuda())
+
             n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
             n_pts_3d = pts_cam_to_world(n_pts_3d, extrinsics)
 
             # --- re-aligns two point clouds with partial overlap ---
-            n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
-                                                                   image_shape=(imsize, imsize), 
-                                                                   color_threshold=60, 
-                                                                   align_mode='o3d')
+            #n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
+            #                                                       image_shape=(imsize, imsize),
+            #                                                       color_threshold=30,
+            #                                                       align_mode='None')
 
             # --- merge and filtering new point cloud ---
-            pts_3d, rgb_3d = merge_and_filter(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d)
+            #pts_3d, rgb_3d = merge_and_filter(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d)
+            pts_3d = torch.cat((pts_3d, n_pts_3d), dim=0)
+            rgb_3d = torch.cat((rgb_3d, n_rgb_3d), dim=0)
     rr.script_teardown(args)
 
 if __name__ == "__main__":

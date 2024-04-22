@@ -94,7 +94,6 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
 
     # Calculate the difference between colors at valid indices
     color_difference = torch.abs(gt_c_image - new_c_image).sum(dim=2)
-
     # Check if the difference is within the threshold (60) for all RGB channels
     within_threshold = (color_difference <= color_threshold) & valid_indices
     matches_count = within_threshold.sum()
@@ -110,14 +109,13 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     gt_image[gt_proj[:, 0], gt_proj[:, 1]] = select_gt_3d
     new_image[new_proj[:, 0], new_proj[:, 1]] = select_new_3d
 
-    plt.imshow(gt_c_image.cpu().numpy() / 255.0); plt.show()
-    breakpoint()
+    #plt.imshow(gt_c_image.cpu().numpy() / 255.0); plt.show()
 
     extrinsics_inv = torch.linalg.pinv(extrinsics)
     scale = None
     shift = None
     if align_mode == 'median':
-        diff_3d = gt_image[:, :, :] / new_image[:, :, :]
+        diff_3d = new_image[:, :, :] / gt_image[:, :, :]
         scale = diff_3d[within_threshold].median()
         new_3d_colors = new_colors
         new_3d_scaled = new_camera
@@ -126,17 +124,17 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     elif align_mode == 'o3d':
         source = o3d.geometry.PointCloud()
         source.points = o3d.utility.Vector3dVector(gt_image.view(-1, 3).cpu().numpy())
-        source.colors = o3d.utility.Vector3dVector(gt_c_image.view(-1, 3).cpu().numpy())
+        source.colors = o3d.utility.Vector3dVector(gt_c_image.reshape(-1, 3).cpu().numpy())
 
         target = o3d.geometry.PointCloud()
         target.points = o3d.utility.Vector3dVector(new_image.view(-1, 3).cpu().numpy())
-        target.colors = o3d.utility.Vector3dVector(new_c_image.view(-1, 3).cpu().numpy())
+        target.colors = o3d.utility.Vector3dVector(new_c_image.reshape(-1, 3).cpu().numpy())
 
         o3d_indices = torch.where(within_threshold.view(-1))[0].tolist()
 
         # Align the point clouds based on the corresponding parts
         icp_result = align_partial_point_clouds(
-            source, target, o3d_indices, o3d_indices, threshold=50.)
+            source, target, o3d_indices, o3d_indices, threshold=5.)
         scale = shift = icp_result.transformation
 
         # Apply the computed transformation to the entire source point cloud
@@ -144,7 +142,6 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
         new_3d_scaled.points = o3d.utility.Vector3dVector(new_camera[:, :3].cpu().numpy())
         new_3d_scaled.colors = o3d.utility.Vector3dVector(new_colors.cpu().numpy())
         new_3d_scaled = new_3d_scaled.transform(icp_result.transformation)
-        breakpoint()
 
         new_3d_colors = torch.tensor(np.asarray(new_3d_scaled.colors)).to(torch.uint8).to('cuda')#[within_threshold.view(-1)]
         new_3d_scaled = torch.tensor(np.asarray(new_3d_scaled.points)).float().to('cuda')#[within_threshold.view(-1)]
@@ -153,8 +150,11 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     elif align_mode == 'lstsq':
         # TODO use original selected points here
         _, scale, shift = fit_least_squares_shift_scale_with_mask(gt_image, new_image, within_threshold, within_threshold)
-        new_3d_scaled = new_points_3d 
+        new_3d_scaled = new_camera
         new_3d_scaled[:, :3] = new_3d[:, :3] * scale + shift
+        new_3d_colors = new_colors
+    else:
+        new_3d_scaled = new_camera
         new_3d_colors = new_colors
 
     # --- for reversing extrinsics ---

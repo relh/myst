@@ -4,7 +4,7 @@ import torch
 from pytorch3d.ops import knn_points
 
 
-def density_pruning_py3d(points, colors, nb_neighbors=9, std_ratio=1.5):
+def density_pruning_py3d(points, colors, nb_neighbors=9, std_ratio=3.5):
     # Ensure points and colors are on the same device and in float format
     points = points.float()
     

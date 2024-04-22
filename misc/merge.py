@@ -62,7 +62,7 @@ def trim_points(new_da_3d, new_da_colors, border=1):
 
     return result_points, result_colors
 
-def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=5.0):
+def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=50.0):
     """
     Merge two point clouds on the GPU, retaining all points from da_3d and filtering new_da_3d points based on uniqueness,
     excluding black points from new_da_3d.
@@ -71,7 +71,7 @@ def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=5.0):
     :param new_da_3d: Tensor of new points (M, 3) to merge, on the GPU.
     :param da_colors: Tensor of colors corresponding to da_3d points (N, 3).
     :param new_da_colors: Tensor of colors corresponding to new_da_3d points (M, 3).
-    :param epsilon: Proximity threshold, points closer than this are considered duplicates.
+    :param epsilon: Proximity threshold, points closer than 1 over this are considered duplicates.
     :return: Tuple of merged point cloud and colors as PyTorch tensors.
     """
     if epsilon is None: 

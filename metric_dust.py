@@ -66,22 +66,21 @@ def load_images(color_image, size, square_ok=True):
     return imgs
 
 
-def img_to_pts_3d_dust(color_image):
+def img_to_pts_3d_dust(color_image, joint):
     global dust_model
     device = 'cuda'
     batch_size = 1
-    get_focals = False
-    one_frame = True
+    get_intrinsics = False 
     if dust_model is None:
         model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
         dust_model = load_model(model_path, device)
-        get_focals = True
+        get_intrinsics = True
 
     # --- whether to standalone use this image or not ---
-    if one_frame:
-        color_image = [[Image.fromarray(image.cpu().numpy()) for image in color_image][0]]
-    else:
+    if joint:
         color_image = [Image.fromarray(image.cpu().numpy()) for image in color_image]
+    else:
+        color_image = [[Image.fromarray(image.cpu().numpy()) for image in color_image][0]]
     images = load_images(color_image, size=512)
 
     # --- run dust3r ---
@@ -91,27 +90,28 @@ def img_to_pts_3d_dust(color_image):
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
-    if one_frame:
-        pts_3d = scene.get_pts3d()[0]
-    else:
+    if joint:
         loss = None
         if len(color_image) > 2:
             loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
             pts_3d = scene.get_pts3d()[0]
         else:
             pts_3d = output[f'pred1']['pts3d'][0].to(device)
+    else:
+        pts_3d = scene.get_pts3d()[0]
     #imgs = scene.imgs
     #confidence_masks = scene.get_masks()
 
     # --- find focal length ---
-    focals = None
-    if get_focals:
-        focals = scene.get_focals()[0]
-        #scene.get_im_poses()[0]
+    intrinsics = None
+    if get_intrinsics:
+        #focals = scene.get_focals()[0]
+        intrinsics = scene.get_intrinsics()[0].float().cuda()
+        #scene.get_im_poses()
 
     rgb_3d = torch.tensor(np.asarray(color_image[0])).to(torch.uint8).to(device)
     return pts_3d.reshape(-1, 3) * 1000.0, \
-           rgb_3d.reshape(-1, 3), focals
+           rgb_3d.reshape(-1, 3), intrinsics
 
 if __name__ == '__main__':
     model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
