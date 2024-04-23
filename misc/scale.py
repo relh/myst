@@ -75,6 +75,39 @@ def align_partial_point_clouds(source, target, source_mask, target_mask, thresho
     )
     return icp_result
 
+def vis_images(img1, img2):
+    img1 = img1.cpu().numpy() + 1 
+    img2 = img2.cpu().numpy() + 1
+    img1 /= 255.0
+    img2 /= 255.0
+
+    # Compute the absolute difference image
+    difference = np.abs(img1 - img2)
+    difference[img1 == 0] = 0.0
+    difference[img2 == 0] = 0.0
+
+    # Create a figure with 3 subplots
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    # Plotting the first image
+    axes[0].imshow(img1)
+    axes[0].axis('off')  # Turn off axis numbers and ticks
+    axes[0].set_title('Image 1')
+
+    # Plotting the second image
+    axes[1].imshow(img2)
+    axes[1].axis('off')
+    axes[1].set_title('Image 2')
+
+    # Plotting the difference image
+    axes[2].imshow(difference)
+    axes[2].axis('off')
+    axes[2].set_title('Difference')
+
+    # Display the plots
+    plt.tight_layout()
+    plt.show()
+
 def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors, intrinsics, extrinsics, image_shape, color_threshold=30, align_mode='median'):
     gt_proj, mod_gt_colors, gt_3d, select_gt_3d, gt_camera = pts_world_to_unique(gt_points_3d, gt_colors, intrinsics, extrinsics, image_shape)
     new_proj, mod_new_colors, new_3d, select_new_3d, new_camera = pts_world_to_unique(new_points_3d, new_colors, intrinsics, extrinsics, image_shape)
@@ -109,7 +142,8 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     gt_image[gt_proj[:, 0], gt_proj[:, 1]] = select_gt_3d
     new_image[new_proj[:, 0], new_proj[:, 1]] = select_new_3d
 
-    #plt.imshow(gt_c_image.cpu().numpy() / 255.0); plt.show()
+    vis_images(gt_c_image, new_c_image)
+    breakpoint()
 
     # TODO this is broken because the intrinsics are wrong so the "corresponding" points 
     # are no longer "corresponding"
