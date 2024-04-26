@@ -51,11 +51,11 @@ def move_camera(extrinsics, direction, amount):
     
     if direction in ['w', 's']:
         # Direction vector for forward/backward 
-        amount = 75.0 * (-amount if direction == 'w' else amount)
+        amount = 0.1 * (-amount if direction == 'w' else amount)
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
     elif direction in ['q', 'e']:
         # Direction vector for up/down 
-        amount = 75.0 * (-amount if direction == 'q' else amount)
+        amount = 0.1 * (-amount if direction == 'q' else amount)
         extrinsics[:3, 3] += torch.tensor([0, amount, 0], device=extrinsics.device).float()
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
@@ -80,22 +80,19 @@ def main():
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--views', type=str, default='multi', help='multi / single')
     args = parser.parse_args()
-    rr.script_setup(args, "17myst")
+    rr.script_setup(args, "24myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    cameras = None
     pts_3d = None
     image = None
-    extrinsics = None
-    all_images = []
-    all_poses = []
     imsize = 512.
     idx = 0
     while True:
         idx += 1
+
         # --- setup initial scene ---
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
@@ -103,30 +100,20 @@ def main():
             image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
             mask_3d = torch.ones(512, 512)
 
-            all_images.append(image)
+            all_images = [image]
         else:
             image = gen_image.to(torch.uint8)
             image[image.sum(dim=2) < 10] = 0.0
 
-        # --- establish orientation ---
-        if extrinsics == None:
-            extrinsics = torch.tensor([[1, 0, 0, 0],
-                                       [0, 1, 0, 0],
-                                       [0, 0, 1, 0],
-                                       [0, 0, 0, 1]]).float().cuda()
-            all_poses.append(extrinsics)
-
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, intrinsics = img_to_pts_3d(all_images, views=args.views)
+            pts_3d, rgb_3d, extrinsics, intrinsics = img_to_pts_3d(all_images, poses=None, views=args.views)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
-            if intrinsics is None:
-                intrinsics = torch.tensor([[256., 0, 256.],\
-                                           [0, 256., 256.],\
-                                           [0, 0, 1.0]]).float().cuda()
+            all_poses = [extrinsics]
 
-            if args.renderer != 'raster':
+            # --- establish camera parameters ---
+            if args.renderer == 'py3d':
                 cameras = PerspectiveCameras(
                     device='cuda',
                     R=torch.eye(3).unsqueeze(0),
@@ -189,11 +176,15 @@ def main():
             gen_image[mask] = sq_init[mask]
 
             # --- add to duster list ---
-            all_images.append(gen_image)
-            all_poses.append(extrinsics)
+            all_images.insert(0, gen_image)
+            all_poses.insert(0, extrinsics)
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, _ = img_to_pts_3d(all_images, all_poses, views=args.views)
+            print('--- 1 ---')
+            print(extrinsics)
+            pts_3d, rgb_3d, extrinsics, _ = img_to_pts_3d(all_images, poses=all_poses, views=args.views)
+            print('--- 2 ---')
+            print(extrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
     rr.script_teardown(args)
 

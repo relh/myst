@@ -24,7 +24,7 @@ sys.path.append('dust3r/')
 
 from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 from dust3r.image_pairs import make_pairs
-from dust3r.inference import inference, load_model
+from dust3r.inference import inference
 from dust3r.model import AsymmetricCroCo3DStereo
 from dust3r.utils.image import rgb
 from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
@@ -83,31 +83,42 @@ def img_to_pts_3d_dust(images, poses=None, views='single'):
     device = 'cuda'
     batch_size = 1
     if dust_model is None:
-        model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
-        dust_model = load_model(model_path, device)
+        weights_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
+        dust_model = AsymmetricCroCo3DStereo.from_pretrained(weights_path).to('cuda')
 
     # --- whether to standalone index 0 image or not ---
     images = [Image.fromarray(image.cpu().numpy()) for image in images]
     if views == 'single':
-        images = [images[-1]]
+        images = [images[0]]
     images = load_images(images, size=512)
 
     # --- run dust3r ---
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
-    mode = GlobalAlignerMode.PointCloudOptimizer if len(images) > 1 else GlobalAlignerMode.PairViewer
+    mode = GlobalAlignerMode.ModularPointCloudOptimizer if len(images) > 1 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
     #if poses is not None:
-    #    scene.preset_pose(poses)
-
-    if len(images) > 1:
-        loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
+    #    scene.preset_pose([x.cpu().numpy() for x in poses])
+    loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
     #scene = scene.clean_pointcloud()
     #scene = scene.mask_sky()
 
     # --- post processing ---
-    pts_3d = torch.stack(scene.get_pts3d()).detach().reshape(-1, 3).cuda().to(torch.float32)
-    rgb_3d = torch.stack([torch.tensor(x) for x in scene.imgs]).detach().reshape(-1, 3).cuda()
-    return pts_3d, (rgb_3d[:, :3] * 255.0).to(torch.uint8), scene.get_intrinsics()[0].float().cuda().detach()
+    clean = lambda x: x.float().cuda().detach()
+    extrinsics = clean(scene.get_im_poses()[0])
+    intrinsics = clean(scene.get_intrinsics()[0])
+    pts_3d = clean(torch.stack(scene.get_pts3d()))
+    rgb_3d = clean(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
+
+    return pts_3d.reshape(-1, 3),\
+           rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
+           extrinsics,\
+           intrinsics
+            
+
+
+
+
+
