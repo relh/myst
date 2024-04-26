@@ -80,7 +80,7 @@ def main():
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--views', type=str, default='multi', help='multi / single')
     args = parser.parse_args()
-    rr.script_setup(args, "15myst")
+    rr.script_setup(args, "17myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
@@ -91,6 +91,7 @@ def main():
     image = None
     extrinsics = None
     all_images = []
+    all_poses = []
     imsize = 512.
     idx = 0
     while True:
@@ -100,13 +101,12 @@ def main():
             #prompt = input(f"enter stable diffusion initial scene: ")
             prompt = 'a high-resolution photo of a large kitchen.'
             image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
-            mask = mask_3d = torch.ones(512, 512)
+            mask_3d = torch.ones(512, 512)
 
-            all_images.insert(0, image)
+            all_images.append(image)
         else:
-            image = wombo_img.to(torch.uint8)
-            mask = image.sum(dim=2) < 10
-            image[mask] = 0.0
+            image = gen_image.to(torch.uint8)
+            image[image.sum(dim=2) < 10] = 0.0
 
         # --- establish orientation ---
         if extrinsics == None:
@@ -114,11 +114,11 @@ def main():
                                        [0, 1, 0, 0],
                                        [0, 0, 1, 0],
                                        [0, 0, 0, 1]]).float().cuda()
+            all_poses.append(extrinsics)
 
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, intrinsics = img_to_pts_3d(all_images, views=args.views)
-            pts_3d = pts_cam_to_world(pts_3d, extrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             if intrinsics is None:
@@ -139,7 +139,7 @@ def main():
 
         # --- rerun logging --- 
         rr.set_time_sequence("frame", idx+1)
-        rr.log(f"world/points", rr.Points3D(pts_3d.cpu().numpy(), colors=rgb_3d.cpu().numpy()), timeless=True)
+        rr.log(f"world/points", rr.Points3D(pts_3d.cpu().numpy(), colors=rgb_3d.cpu().numpy()))
         rr.log("world/camera", 
             rr.Transform3D(translation=extrinsics[:3, 3].cpu().numpy(),
                            mat3x3=extrinsics[:3, :3].cpu().numpy(), from_parent=True))
@@ -177,35 +177,24 @@ def main():
             inpaint = True
 
         # --- turn 3d points to image ---
-        wombo_img = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (imsize, imsize), cameras)
+        gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, extrinsics, (imsize, imsize), cameras)
 
         if inpaint: 
             # --- inpaint pipeline ---
-            wombo_img = fill(wombo_img)      # blur points to make a smooth image
-            mask = wombo_img.sum(dim=2) < 10
-            wombo_img[mask] = -1.0
-            sq_init = run_inpaint(wombo_img, mask.float(), prompt=prompt)
-            wombo_img = wombo_img.to(torch.uint8)
-            wombo_img[mask] = sq_init[mask]
-            all_images.insert(0, wombo_img)
+            gen_image = fill(gen_image)      # blur points to make a smooth image
+            mask = gen_image.sum(dim=2) < 10
+            gen_image[mask] = -1.0
+            sq_init = run_inpaint(gen_image, mask.float(), prompt=prompt)
+            gen_image = gen_image.to(torch.uint8)
+            gen_image[mask] = sq_init[mask]
+
+            # --- add to duster list ---
+            all_images.append(gen_image)
+            all_poses.append(extrinsics)
 
             # --- lift img to 3d ---
-            n_pts_3d, n_rgb_3d, _ = img_to_pts_3d(all_images, views=args.views)
-            #print(cameras.focal_length)
-            #cameras.focal_length = -(torch.tensor((intrinsics[0, 0], intrinsics[1, 1])).unsqueeze(0).cuda())
-            n_pts_3d = pts_cam_to_world(n_pts_3d, extrinsics)
-            n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
-
-            # --- re-aligns two point clouds with partial overlap ---
-            #n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
-            #                                                       image_shape=(imsize, imsize),
-            #                                                       color_threshold=30,
-            #                                                       align_mode='median')
-
-            # --- merge and filtering new point cloud ---
-            #pts_3d, rgb_3d = merge_and_filter(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d)
-            pts_3d = n_pts_3d #torch.cat((pts_3d, n_pts_3d), dim=0)
-            rgb_3d = n_rgb_3d #torch.cat((rgb_3d, n_rgb_3d), dim=0)
+            pts_3d, rgb_3d, _ = img_to_pts_3d(all_images, all_poses, views=args.views)
+            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
 if __name__ == "__main__":

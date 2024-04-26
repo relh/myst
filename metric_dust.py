@@ -26,7 +26,6 @@ from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 from dust3r.image_pairs import make_pairs
 from dust3r.inference import inference, load_model
 from dust3r.model import AsymmetricCroCo3DStereo
-from dust3r.utils.device import to_numpy
 from dust3r.utils.image import rgb
 from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
                         pts3d_to_trimesh)
@@ -79,7 +78,7 @@ def load_images(images, size, square_ok=True):
 
     return imgs
 
-def img_to_pts_3d_dust(images, views='single'):
+def img_to_pts_3d_dust(images, poses=None, views='single'):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -90,7 +89,7 @@ def img_to_pts_3d_dust(images, views='single'):
     # --- whether to standalone index 0 image or not ---
     images = [Image.fromarray(image.cpu().numpy()) for image in images]
     if views == 'single':
-        images = [images[0]]
+        images = [images[-1]]
     images = load_images(images, size=512)
 
     # --- run dust3r ---
@@ -100,27 +99,15 @@ def img_to_pts_3d_dust(images, views='single'):
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
+    #if poses is not None:
+    #    scene.preset_pose(poses)
+
     if len(images) > 1:
         loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
-    else:
-        scene = scene.get_pts3d()[0]
-
     #scene = scene.clean_pointcloud()
     #scene = scene.mask_sky()
 
     # --- post processing ---
-    imgs = to_numpy(scene.imgs)
-    focals = to_numpy(scene.get_focals().cpu())
-    cams2world = to_numpy(scene.get_im_poses().cpu())
-    pts3d = to_numpy(scene.get_pts3d())
-    mask = to_numpy(scene.get_masks())
-    intrinsics = scene.get_intrinsics()[0].float().cuda()
-
-    # full pointcloud
-    pts = np.concatenate([p for p, m in zip(pts3d, mask)])
-    col = np.concatenate([p for p, m in zip(imgs, mask)])
-    scene = trimesh.PointCloud(pts.reshape(-1, 3), colors=col.reshape(-1, 3))
-
-    pts_3d = torch.tensor(scene.vertices, device='cuda', dtype=torch.float32)
-    rgb_3d = torch.tensor(scene.colors, device='cuda', dtype=torch.uint8)
-    return pts_3d * 1000.0, rgb_3d[:, :3], intrinsics.detach()
+    pts_3d = torch.stack(scene.get_pts3d()).detach().reshape(-1, 3).cuda().to(torch.float32)
+    rgb_3d = torch.stack([torch.tensor(x) for x in scene.imgs]).detach().reshape(-1, 3).cuda()
+    return pts_3d, (rgb_3d[:, :3] * 255.0).to(torch.uint8), scene.get_intrinsics()[0].float().cuda().detach()
