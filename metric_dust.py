@@ -1,21 +1,35 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import argparse
 import copy
+import functools
+import math
+import os
 import sys
+import tempfile
 
+import gradio
+import matplotlib.pyplot as pl
 import numpy as np
 import PIL.Image
 import torch
 import torchvision.transforms as tvf
+import trimesh
 from PIL import Image
 from PIL.ImageOps import exif_transpose
+from scipy.spatial.transform import Rotation
 
 sys.path.append('dust3r/')
 
 from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 from dust3r.image_pairs import make_pairs
 from dust3r.inference import inference, load_model
+from dust3r.model import AsymmetricCroCo3DStereo
+from dust3r.utils.device import to_numpy
+from dust3r.utils.image import rgb
+from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
+                        pts3d_to_trimesh)
 from misc.supersample import supersample_point_cloud
 
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -31,9 +45,9 @@ def _resize_pil_image(img, long_edge_size):
     return img.resize(new_size, interp)
 
 
-def load_images(color_image, size, square_ok=True):
+def load_images(images, size, square_ok=True):
     imgs = []
-    for image in color_image:
+    for image in images:
         img = exif_transpose(image)
         W1, H1 = img.size
         if size == 224:
@@ -65,8 +79,7 @@ def load_images(color_image, size, square_ok=True):
 
     return imgs
 
-
-def img_to_pts_3d_dust(color_image, views='single'):
+def img_to_pts_3d_dust(images, views='single'):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -74,71 +87,40 @@ def img_to_pts_3d_dust(color_image, views='single'):
         model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
         dust_model = load_model(model_path, device)
 
-    # --- whether to standalone use this image or not ---
-    if views == 'multi':
-        color_image = [Image.fromarray(image.cpu().numpy()) for image in color_image]
-    else:
-        color_image = [[Image.fromarray(image.cpu().numpy()) for image in color_image][0]]
-    images = load_images(color_image, size=512)
+    # --- whether to standalone index 0 image or not ---
+    images = [Image.fromarray(image.cpu().numpy()) for image in images]
+    if views == 'single':
+        images = [images[0]]
+    images = load_images(images, size=512)
 
     # --- run dust3r ---
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
-    mode = GlobalAlignerMode.PointCloudOptimizer if len(color_image) > 2 else GlobalAlignerMode.PairViewer
+    mode = GlobalAlignerMode.PointCloudOptimizer if len(images) > 1 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
-    if views == 'multi':
-        loss = None
-        if len(color_image) > 2:
-            loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
-            pts_3d = scene.get_pts3d()[0]
-        else:
-            pts_3d = output[f'pred1']['pts3d'][0].to(device)
+    if len(images) > 1:
+        loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
     else:
-        pts_3d = scene.get_pts3d()[0]
-    #imgs = scene.imgs
-    #confidence_masks = scene.get_masks()
+        scene = scene.get_pts3d()[0]
 
-    # --- find focal length ---
-    #focals = scene.get_focals()[0]
+    #scene = scene.clean_pointcloud()
+    #scene = scene.mask_sky()
+
+    # --- post processing ---
+    imgs = to_numpy(scene.imgs)
+    focals = to_numpy(scene.get_focals().cpu())
+    cams2world = to_numpy(scene.get_im_poses().cpu())
+    pts3d = to_numpy(scene.get_pts3d())
+    mask = to_numpy(scene.get_masks())
     intrinsics = scene.get_intrinsics()[0].float().cuda()
-    #scene.get_im_poses()
 
-    rgb_3d = torch.tensor(np.asarray(color_image[0])).to(torch.uint8).to(device)
-    return pts_3d.reshape(-1, 3) * 1000.0, \
-           rgb_3d.reshape(-1, 3), intrinsics 
+    # full pointcloud
+    pts = np.concatenate([p for p, m in zip(pts3d, mask)])
+    col = np.concatenate([p for p, m in zip(imgs, mask)])
+    scene = trimesh.PointCloud(pts.reshape(-1, 3), colors=col.reshape(-1, 3))
 
-if __name__ == '__main__':
-    model_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
-    device = 'cuda'
-    batch_size = 1
-    schedule = 'cosine'
-    lr = 0.01
-    niter = 300
-
-    model = load_model(model_path, device)
-    # load_images can take a list of images or a directory
-    images = load_images(['dust3r/croco/assets/Chateau1.png'], size=512)
-    imgs = [imgs[0], copy.deepcopy(imgs[0])]
-    imgs[1]['idx'] = 1
-    breakpoint()
-    pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
-    output = inference(pairs, model, device, batch_size=batch_size)
-
-    # at this stage, you have the raw dust3r predictions
-    #view1, pred1 = output['view1'], output['pred1']
-    #view2, pred2 = output['view2'], output['pred2']
-
-    scene = global_aligner(output, device=device, mode=GlobalAlignerMode.PairViewer)
-
-    # retrieve useful values from scene:
-    imgs = scene.imgs
-    focals = scene.get_focals()
-    poses = scene.get_im_poses()
-    pts3d = scene.get_pts3d()
-    confidence_masks = scene.get_masks()
-
-    # visualize reconstruction
-    #scene.show()
-    breakpoint()
+    pts_3d = torch.tensor(scene.vertices, device='cuda', dtype=torch.float32)
+    rgb_3d = torch.tensor(scene.colors, device='cuda', dtype=torch.uint8)
+    return pts_3d * 1000.0, rgb_3d[:, :3], intrinsics.detach()

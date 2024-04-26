@@ -78,7 +78,7 @@ def main():
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--views', type=str, default='single', help='multi / single')
+    parser.add_argument('--views', type=str, default='multi', help='multi / single')
     args = parser.parse_args()
     rr.script_setup(args, "15myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
@@ -197,15 +197,15 @@ def main():
             n_pts_3d, n_rgb_3d = density_pruning_py3d(n_pts_3d, n_rgb_3d)
 
             # --- re-aligns two point clouds with partial overlap ---
-            n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
-                                                                   image_shape=(imsize, imsize),
-                                                                   color_threshold=30,
-                                                                   align_mode='median')
+            #n_pts_3d, n_rgb_3d, mask_3d = project_and_scale_points(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d, intrinsics, extrinsics, 
+            #                                                       image_shape=(imsize, imsize),
+            #                                                       color_threshold=30,
+            #                                                       align_mode='median')
 
             # --- merge and filtering new point cloud ---
             #pts_3d, rgb_3d = merge_and_filter(pts_3d, n_pts_3d, rgb_3d, n_rgb_3d)
-            pts_3d = torch.cat((pts_3d, n_pts_3d), dim=0)
-            rgb_3d = torch.cat((rgb_3d, n_rgb_3d), dim=0)
+            pts_3d = n_pts_3d #torch.cat((pts_3d, n_pts_3d), dim=0)
+            rgb_3d = n_rgb_3d #torch.cat((rgb_3d, n_rgb_3d), dim=0)
     rr.script_teardown(args)
 
 if __name__ == "__main__":
@@ -220,18 +220,19 @@ if __name__ == "__main__":
     import cProfile
     import io
     import pstats
-    with torch.no_grad():
-        #with torch.autocast(device_type="cuda"):
-        profiler = cProfile.Profile()
-        profiler.enable()
-        main()
-        profiler.disable()
-        s = io.StringIO()
-        ps = pstats.Stats(profiler, stream=s)
-        ps.sort_stats('cumtime')
 
-        # Now we filter and print entries with a cumulative time greater than 0.5 seconds
-        for func in ps.fcn_list:
-            if ps.stats[func][3] > 0.5:  # index 3 is where 'cumulative time' is stored
-                print(f'{func[2]} took {ps.stats[func][3]:.2f} seconds')
-        #breakpoint()
+    #with torch.no_grad():
+    #with torch.autocast(device_type="cuda"):
+    profiler = cProfile.Profile()
+    profiler.enable()
+    main()
+    profiler.disable()
+    s = io.StringIO()
+    ps = pstats.Stats(profiler, stream=s)
+    ps.sort_stats('cumtime')
+
+    # Now we filter and print entries with a cumulative time greater than 0.5 seconds
+    for func in ps.fcn_list:
+        if ps.stats[func][3] > 0.5:  # index 3 is where 'cumulative time' is stored
+            print(f'{func[2]} took {ps.stats[func][3]:.2f} seconds')
+    #breakpoint()
