@@ -99,22 +99,20 @@ def img_to_pts_3d_dust(images, poses=None, views='single'):
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
-    #if poses is not None:
-    #    scene.preset_pose([x.cpu().numpy() for x in poses])
-    loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01)
+    loss = scene.compute_global_alignment(init='mst', niter=50, schedule='cosine', lr=0.01)
     #scene = scene.clean_pointcloud()
     #scene = scene.mask_sky()
 
     # --- post processing ---
     clean = lambda x: x.float().cuda().detach()
-    extrinsics = clean(scene.get_im_poses()[0])
-    intrinsics = clean(scene.get_intrinsics()[0])
+    extrinsics = clean(scene.get_im_poses()[-1])
+    intrinsics = clean(scene.get_intrinsics()[-1])
     pts_3d = clean(torch.stack(scene.get_pts3d()))
     rgb_3d = clean(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
-           extrinsics,\
+           torch.linalg.inv(extrinsics),\
            intrinsics
             
 

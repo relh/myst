@@ -176,15 +176,11 @@ def main():
             gen_image[mask] = sq_init[mask]
 
             # --- add to duster list ---
-            all_images.insert(0, gen_image)
-            all_poses.insert(0, extrinsics)
+            all_images.append(gen_image)
+            all_poses.append(extrinsics)
 
             # --- lift img to 3d ---
-            print('--- 1 ---')
-            print(extrinsics)
             pts_3d, rgb_3d, extrinsics, _ = img_to_pts_3d(all_images, poses=all_poses, views=args.views)
-            print('--- 2 ---')
-            print(extrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
