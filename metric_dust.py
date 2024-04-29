@@ -92,19 +92,18 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
     images = load_images(images, size=512)
 
     # --- run dust3r ---
-    pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
+    pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=False if num_images > 2 else True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
-    #mode = GlobalAlignerMode.ModularPointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
-    mode = GlobalAlignerMode.PointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
+    mode = GlobalAlignerMode.ModularPointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
+    #mode = GlobalAlignerMode.PointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
-    #if mode is GlobalAlignerMode.ModularPointCloudOptimizer and all_cam2world is not None:
-    if mode is GlobalAlignerMode.PointCloudOptimizer and all_cam2world is not None:
-        #for i, this_dm in enumerate(dm):
-        #    scene._set_depthmap(i, this_dm, force=True)
+    if mode is GlobalAlignerMode.ModularPointCloudOptimizer and all_cam2world is not None:
+    #if mode is GlobalAlignerMode.PointCloudOptimizer and all_cam2world is not None:
 
-        all_cam2world = [x for x in all_cam2world]# + [None]
+        # --- format pose and intrinsics ---
+        all_cam2world = [x for x in all_cam2world]
         known_poses = [False if x is None else True for x in all_cam2world]
 
         repl_intrinsics = [intrinsics.cpu().numpy() for x in all_cam2world]
@@ -112,19 +111,22 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
 
         # --- set pose and focal ---
         scene.preset_pose(all_cam2world, known_poses)
-        scene.preset_focal([x[0, 0] for x in repl_intrinsics], known_intrinsics)
+        #scene.preset_intrinsics(repl_intrinsics, known_intrinsics)
 
-        # --- set pp ---
-        #pp = [torch.tensor((x[0, -1], x[1, -1])) for x in repl_intrinsics]
+        # --- set depth maps ---
+        #for i, this_dm in enumerate(dm):
+        #    scene._set_depthmap(i, this_dm, force=True)
+
+        # --- set focal and pp ---
+        #scene.preset_focal([x[0, 0] for x in repl_intrinsics], known_intrinsics)
+
+        #pp = [np.array((x[0, -1], x[1, -1])) for x in repl_intrinsics]
         #for i in range(len(pp)):
         #    pp[i].requires_grad = True
         #scene.preset_principal_point(pp, known_intrinsics)
 
-        #scene.has_im_poses = False
-        #breakpoint()
-
     # --- either get pts or run global optimization ---
-    loss = scene.compute_global_alignment(init='mst', niter=200, schedule='cosine', lr=0.01) # 60/s
+    loss = scene.compute_global_alignment(init='mst', niter=300, schedule='cosine', lr=0.01) # 60/s
     #loss = scene.compute_global_alignment(init='msp', niter=200, schedule='cosine', lr=0.01) # 50/s
     #loss = scene.compute_global_alignment(init='known_poses', niter=200, schedule='cosine', lr=0.01)
     #scene = scene.clean_pointcloud()

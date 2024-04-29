@@ -80,7 +80,7 @@ def main():
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--views', type=str, default='multi', help='multi / single')
     args = parser.parse_args()
-    rr.script_setup(args, "25myst")
+    rr.script_setup(args, "26myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
@@ -107,7 +107,7 @@ def main():
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images, None, None)
-            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---
             if args.renderer == 'py3d':
@@ -179,7 +179,7 @@ def main():
 
             # --- lift img to 3d ---
             pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm=dm)
-            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
 if __name__ == "__main__":
