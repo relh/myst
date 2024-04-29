@@ -97,9 +97,8 @@ def main():
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
             prompt = 'a high-resolution photo of a large kitchen.'
-            image = run_inpaint(torch.zeros(512, 512, 3), torch.ones(512, 512), prompt=prompt)
-            mask_3d = torch.ones(512, 512)
-
+            image = run_inpaint(torch.zeros(imsize, imsize, 3), torch.ones(imsize, imsize), prompt=prompt)
+            mask_3d = torch.ones(imsize, imsize)
             all_images = [image]
         else:
             image = gen_image.to(torch.uint8)

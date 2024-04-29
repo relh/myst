@@ -78,7 +78,7 @@ def load_images(images, size, square_ok=True):
 
     return imgs
 
-def img_to_pts_3d_dust(images, poses=None, intrinsics=None):
+def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -98,14 +98,16 @@ def img_to_pts_3d_dust(images, poses=None, intrinsics=None):
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
-    if mode is GlobalAlignerMode.ModularPointCloudOptimizer and poses is not None:
+    if mode is GlobalAlignerMode.ModularPointCloudOptimizer and all_cam2world is not None:
         # pretend we don't know final pose to appease dust3r
-        poses = [x for x in poses] + [None]
-        known_poses = [True if x != None else False for x in poses]
-        known_intrinsics = [intrinsics for x in poses]
+        all_cam2world = [x.cpu().numpy() for x in all_cam2world] + [None]
+        known_poses = [False if x is None else True for x in all_cam2world]
 
-        scene.preset_pose([x.cpu().numpy() for x in poses], known_poses)
-        scene.preset_intrinsics([x.cpu().numpy() for x in known_intrinsics])
+        repl_intrinsics = [intrinsics.cpu().numpy() for x in all_cam2world]
+        known_intrinsics = [True for x in repl_intrinsics]
+
+        scene.preset_pose(all_cam2world, known_poses)
+        scene.preset_intrinsics(repl_intrinsics, known_intrinsics)
 
     # --- either get pts or run global optimization ---
     loss = scene.compute_global_alignment(init='mst', niter=50, schedule='cosine', lr=0.01)
@@ -113,12 +115,12 @@ def img_to_pts_3d_dust(images, poses=None, intrinsics=None):
     #scene = scene.mask_sky()
 
     # --- post processing ---
-    clean = lambda x: x.float().cuda()#.detach()
-    all_cam2world = [clean(x) for x in scene.get_im_poses()]
+    use = lambda x: x.float().cuda().detach()
+    all_cam2world = [use(x) for x in scene.get_im_poses()]
     world2cam = torch.linalg.inv(all_cam2world[-1])
-    intrinsics = clean(scene.get_intrinsics()[-1])
-    pts_3d = clean(torch.stack(scene.get_pts3d()))
-    rgb_3d = clean(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
+    intrinsics = use(scene.get_intrinsics()[-1])
+    pts_3d = use(torch.stack(scene.get_pts3d()))
+    rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
