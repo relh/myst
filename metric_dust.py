@@ -78,7 +78,7 @@ def load_images(images, size, square_ok=True):
 
     return imgs
 
-def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None):
+def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -99,8 +99,10 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None):
 
     # --- either get pts or run global optimization ---
     if mode is GlobalAlignerMode.ModularPointCloudOptimizer and all_cam2world is not None:
-        # pretend we don't know final pose to appease dust3r
-        all_cam2world = [x.cpu().numpy() for x in all_cam2world] + [None]
+        for i, c2m in enumerate(all_cam2world):
+            scene._set_depthmap(i, dm[i], force=True)
+
+        all_cam2world = [x for x in all_cam2world] + [None]
         known_poses = [False if x is None else True for x in all_cam2world]
 
         repl_intrinsics = [intrinsics.cpu().numpy() for x in all_cam2world]
@@ -121,12 +123,14 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None):
     intrinsics = use(scene.get_intrinsics()[-1])
     pts_3d = use(torch.stack(scene.get_pts3d()))
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
+    depth_maps = scene.get_depthmaps()
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
            world2cam,\
            all_cam2world,\
-           intrinsics
+           intrinsics,\
+           depth_maps
             
 
 

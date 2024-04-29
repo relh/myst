@@ -80,7 +80,7 @@ def main():
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--views', type=str, default='multi', help='multi / single')
     args = parser.parse_args()
-    rr.script_setup(args, "24myst")
+    rr.script_setup(args, "25myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
@@ -88,7 +88,7 @@ def main():
 
     pts_3d = None
     image = None
-    imsize = 512.
+    imsize = 512
     idx = 0
     while True:
         idx += 1
@@ -106,7 +106,7 @@ def main():
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics = img_to_pts_3d(all_images, None, None)
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images, None, None)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---
@@ -166,7 +166,7 @@ def main():
 
         if inpaint: 
             # --- inpaint pipeline ---
-            gen_image = fill(gen_image)      # blur points to make a smooth image
+            #gen_image = fill(gen_image)      # blur points to make a smooth image
             mask = gen_image.sum(dim=2) < 10
             gen_image[mask] = -1.0
             sq_init = run_inpaint(gen_image, mask.float(), prompt=prompt)
@@ -177,7 +177,7 @@ def main():
             all_images.append(gen_image)
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, world2cam, all_cam2world, _ = img_to_pts_3d(all_images, all_cam2world, intrinsics)
+            pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm=dm)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
@@ -194,18 +194,17 @@ if __name__ == "__main__":
     import io
     import pstats
 
+    # Profile the `main` function or any other part of your code
+    pr = cProfile.Profile()
+    pr.enable()
+
     #with torch.no_grad():
     #with torch.autocast(device_type="cuda"):
-    profiler = cProfile.Profile()
-    profiler.enable()
-    main()
-    profiler.disable()
-    s = io.StringIO()
-    ps = pstats.Stats(profiler, stream=s)
-    ps.sort_stats('cumtime')
+    main()  # Call the function you want to profile
 
-    # Now we filter and print entries with a cumulative time greater than 0.5 seconds
-    for func in ps.fcn_list:
-        if ps.stats[func][3] > 0.5:  # index 3 is where 'cumulative time' is stored
-            print(f'{func[2]} took {ps.stats[func][3]:.2f} seconds')
-    #breakpoint()
+    pr.disable()
+    s = io.StringIO()
+    sortby = 'cumulative'  # Can be 'time', 'calls', etc.
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    print(s.getvalue())
