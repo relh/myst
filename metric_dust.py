@@ -95,10 +95,12 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=False if num_images > 2 else True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
     mode = GlobalAlignerMode.ModularPointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
-    #mode = GlobalAlignerMode.PointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
+    '''
+    #mode = GlobalAlignerMode.PointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
+
     if mode is GlobalAlignerMode.ModularPointCloudOptimizer and all_cam2world is not None:
     #if mode is GlobalAlignerMode.PointCloudOptimizer and all_cam2world is not None:
 
@@ -124,6 +126,7 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
         #for i in range(len(pp)):
         #    pp[i].requires_grad = True
         #scene.preset_principal_point(pp, known_intrinsics)
+    '''
 
     # --- either get pts or run global optimization ---
     loss = scene.compute_global_alignment(init='mst', niter=300, schedule='cosine', lr=0.01) # 60/s
