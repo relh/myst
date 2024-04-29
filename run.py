@@ -175,6 +175,7 @@ def main():
 
             # --- add to duster list ---
             all_images.append(gen_image)
+            all_cam2world.append(torch.linalg.inv(world2cam))
 
             # --- lift img to 3d ---
             pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm=dm)
@@ -206,5 +207,7 @@ if __name__ == "__main__":
     s = io.StringIO()
     sortby = 'cumulative'  # Can be 'time', 'calls', etc.
     ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    print(s.getvalue())
+    #ps.print_stats()
+    #print(s.getvalue())
+
+

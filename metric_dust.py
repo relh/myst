@@ -94,25 +94,39 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
     # --- run dust3r ---
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
-    mode = GlobalAlignerMode.ModularPointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
+    #mode = GlobalAlignerMode.ModularPointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
+    mode = GlobalAlignerMode.PointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
     scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
-    if mode is GlobalAlignerMode.ModularPointCloudOptimizer and all_cam2world is not None:
-        for i, c2m in enumerate(all_cam2world):
-            scene._set_depthmap(i, dm[i], force=True)
+    #if mode is GlobalAlignerMode.ModularPointCloudOptimizer and all_cam2world is not None:
+    if mode is GlobalAlignerMode.PointCloudOptimizer and all_cam2world is not None:
+        #for i, this_dm in enumerate(dm):
+        #    scene._set_depthmap(i, this_dm, force=True)
 
-        all_cam2world = [x for x in all_cam2world] + [None]
+        all_cam2world = [x for x in all_cam2world]# + [None]
         known_poses = [False if x is None else True for x in all_cam2world]
 
         repl_intrinsics = [intrinsics.cpu().numpy() for x in all_cam2world]
         known_intrinsics = [True for x in repl_intrinsics]
 
+        # --- set pose and focal ---
         scene.preset_pose(all_cam2world, known_poses)
-        scene.preset_intrinsics(repl_intrinsics, known_intrinsics)
+        scene.preset_focal([x[0, 0] for x in repl_intrinsics], known_intrinsics)
+
+        # --- set pp ---
+        #pp = [torch.tensor((x[0, -1], x[1, -1])) for x in repl_intrinsics]
+        #for i in range(len(pp)):
+        #    pp[i].requires_grad = True
+        #scene.preset_principal_point(pp, known_intrinsics)
+
+        #scene.has_im_poses = False
+        #breakpoint()
 
     # --- either get pts or run global optimization ---
-    loss = scene.compute_global_alignment(init='mst', niter=50, schedule='cosine', lr=0.01)
+    loss = scene.compute_global_alignment(init='mst', niter=200, schedule='cosine', lr=0.01) # 60/s
+    #loss = scene.compute_global_alignment(init='msp', niter=200, schedule='cosine', lr=0.01) # 50/s
+    #loss = scene.compute_global_alignment(init='known_poses', niter=200, schedule='cosine', lr=0.01)
     #scene = scene.clean_pointcloud()
     #scene = scene.mask_sky()
 
