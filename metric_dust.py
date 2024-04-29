@@ -111,7 +111,7 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
 
         # --- set pose and focal ---
         scene.preset_pose(all_cam2world, known_poses)
-        #scene.preset_intrinsics(repl_intrinsics, known_intrinsics)
+        scene.preset_intrinsics(repl_intrinsics, known_intrinsics)
 
         # --- set depth maps ---
         #for i, this_dm in enumerate(dm):
