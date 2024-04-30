@@ -7,6 +7,8 @@ import torch
 
 torch.backends.cuda.preferred_linalg_library()
 
+import os
+import pickle
 import sys
 import termios
 import tty
@@ -27,6 +29,7 @@ from misc.prune import density_pruning_py3d
 from misc.renderer import pts_3d_to_img_py3d
 from misc.scale import project_and_scale_points
 from misc.supersample import run_supersample
+from misc.write import write_inference_html
 
 
 def get_keypress():
@@ -82,18 +85,10 @@ def move_camera(extrinsics, direction, amount):
     return extrinsics
 
 
-def main():
+def main(args, meta_idx):
     # --- setup rerun args ---
-    parser = ArgumentParser(description="Build your own adventure.")
-    rr.script_add_args(parser)
-    parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--views', type=str, default='multi', help='multi / single')
-    parser.add_argument('--controller', type=str, default='ai', help='me / ai')
-    args = parser.parse_args()
-    rr.script_setup(args, "27myst")
+    rr.script_setup(args, f"{meta_idx}myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
-
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
@@ -158,6 +153,7 @@ def main():
         if args.controller == 'me':
             user_input = get_keypress()
         else:
+            if idx >= len(sequence): break
             user_input = sequence[idx]
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             world2cam = move_camera(world2cam, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
@@ -203,6 +199,16 @@ def main():
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
+    if args.controller == 'ai':
+        data = {'meta_idx': meta_idx,\
+                'prompt': prompt}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
+        start = Image.fromarray(all_images[0].cpu().numpy())
+        end = Image.fromarray(all_images[-1].cpu().numpy())
+
+        start.save(f'./outputs/imgs/{meta_idx}_start.png')
+        end.save(f'./outputs/imgs/{meta_idx}_end.png')
+        pickle.dump(data, open(f'./outputs/pickles/{meta_idx}.pkl', 'wb'))
+
 if __name__ == "__main__":
     # --- procedure ---
     # 1. load an input image
@@ -211,22 +217,19 @@ if __name__ == "__main__":
     # 4. move around and apply delta extrinsics
     # 5. re-render new image with mask
     # 6. in paint black with diffusion
-
-    import cProfile
-    import io
-    import pstats
-
-    # Profile the `main` function or any other part of your code
-    pr = cProfile.Profile()
-    pr.enable()
+    parser = ArgumentParser(description="Build your own adventure.")
+    rr.script_add_args(parser)
+    parser.add_argument('--depth', type=str, default='dust', help='da / dust')
+    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
+    parser.add_argument('--views', type=str, default='multi', help='multi / single')
+    parser.add_argument('--controller', type=str, default='ai', help='me / ai')
+    args = parser.parse_args()
 
     #with torch.no_grad():
     #with torch.autocast(device_type="cuda"):
-    main()  # Call the function you want to profile
+    pickles = sorted([x for x in os.listdir('./outputs/pickles/') if 'pkl' in x], key=lambda x: int(x.split('.')[0]))
+    how_far = int(pickles[-1].split('.')[0])
 
-    pr.disable()
-    s = io.StringIO()
-    sortby = 'cumulative'  # Can be 'time', 'calls', etc.
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    #ps.print_stats()
-    #print(s.getvalue())
+    # OOM after 130 or so
+    for meta_idx in range(100):
+        main(args, meta_idx+how_far)  

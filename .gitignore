@@ -1,3 +1,6 @@
+outputs/imgs/
+outputs/pickles/
+
 dataset/
 cache/
 assets/
