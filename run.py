@@ -184,7 +184,7 @@ def main(args, meta_idx):
 
         if inpaint: 
             # --- inpaint pipeline ---
-            #gen_image = fill(gen_image)      # blur points to make a smooth image
+            gen_image = fill(gen_image)      # blur points to make a smooth image
             mask = gen_image.sum(dim=2) < 10
             gen_image[mask] = -1.0
             sq_init = run_inpaint(gen_image, mask.float(), prompt=prompt)
