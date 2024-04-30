@@ -15,6 +15,7 @@ import tty
 from argparse import ArgumentParser
 
 import rerun as rr  # pip install rerun-sdk
+from PIL import Image
 from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 
 from misc.camera import pts_3d_to_img_raster, pts_cam_to_world
