@@ -99,6 +99,7 @@ def main():
             #prompt = input(f"enter stable diffusion initial scene: ")
             #prompt = 'a high-resolution photo of a large kitchen.'
             prompt = generate_prompt()
+            print(prompt)
 
             image = run_inpaint(torch.zeros(imsize, imsize, 3), torch.ones(imsize, imsize), prompt=prompt)
             mask_3d = torch.ones(imsize, imsize)
@@ -110,7 +111,7 @@ def main():
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images, None, None)
-            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---
             if args.renderer == 'py3d':
@@ -182,7 +183,7 @@ def main():
 
             # --- lift img to 3d ---
             pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm=dm)
-            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
     rr.script_teardown(args)
 
 if __name__ == "__main__":

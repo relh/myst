@@ -27,7 +27,9 @@ def generate_prompt():
     #modifier = random.choice(modifiers)
 
     # Compose the prompt
-    prompt = f"{lead_in} {scene}. In the foreground, {obj} {arrangement} {background}"#. This scene is rendered in a {modifier} style."
+    prompt = f"{lead_in} a {scene.lower()}"
+    #prompt += f" In the foreground, {obj} {arrangement} {background}."
+    #prompt += f" This scene is rendered in a {modifier} style."
     return prompt
 
 if __name__ == "__main__":
