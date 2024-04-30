@@ -9,8 +9,8 @@ def generate_control():
     rot = random.choice(['a', 'd'])
     trans = random.choice(['w', 's', 's', 's'])
 
-    rot_num = random.choice([4, 5, 6, 7, 8, 9]) 
-    trans_num = random.choice([3, 4, 5, 6])
+    rot_num = random.choice([2, 3, 4, 5, 6, 7]) 
+    trans_num = random.choice([2, 3, 4])
 
     sequence = [rot] * rot_num + [trans] * trans_num + ['f']
     return sequence

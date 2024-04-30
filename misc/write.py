@@ -22,6 +22,7 @@ def write_inference_html(all_data):
 
             f.write(f'<tr><td><div><span style="width: 2vw;">{str(meta_idx)}</span></div></td>')
             f.write(f'<td><div>{data["prompt"]}</div></td>')
+            f.write(f'<td><div>{data["sequence"]}</div></td>')
             f.write(f'<td><div><img class="lazy" onerror="this.onerror=null; this.remove();" data-src="/~relh/mysty/imgs/{meta_idx}_start.png"></div></td>')
             f.write(f'<td><div><img class="lazy" onerror="this.onerror=null; this.remove();" data-src="/~relh/mysty/imgs/{meta_idx}_end.png"></div></td>')
             f.write('</tr>')

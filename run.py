@@ -202,7 +202,8 @@ def main(args, meta_idx):
 
     if args.controller == 'ai':
         data = {'meta_idx': meta_idx,\
-                'prompt': prompt}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
+                'prompt': prompt,\
+                'sequence': sequence}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
         start = Image.fromarray(all_images[0].cpu().numpy())
         end = Image.fromarray(all_images[-1].cpu().numpy())
 
@@ -229,7 +230,9 @@ if __name__ == "__main__":
     #with torch.no_grad():
     #with torch.autocast(device_type="cuda"):
     pickles = sorted([x for x in os.listdir('./outputs/pickles/') if 'pkl' in x], key=lambda x: int(x.split('.')[0]))
-    how_far = int(pickles[-1].split('.')[0])
+    how_far = 0
+    if len(pickles) > 0: 
+        how_far = int(pickles[-1].split('.')[0])
 
     # OOM after 130 or so
     for meta_idx in range(100):
