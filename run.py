@@ -16,6 +16,7 @@ import rerun as rr  # pip install rerun-sdk
 from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 
 from misc.camera import pts_3d_to_img_raster, pts_cam_to_world
+from misc.controller import generate_control
 from misc.da_3d import img_to_pts_3d_da
 from misc.dust_3d import img_to_pts_3d_dust
 from misc.imutils import fill
@@ -52,7 +53,7 @@ def move_camera(extrinsics, direction, amount):
     
     if direction in ['w', 's']:
         # Direction vector for forward/backward 
-        amount = 0.1 * (-amount if direction == 'w' else amount)
+        amount = 0.5 * (-amount if direction == 'w' else amount)
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
     elif direction in ['q', 'e']:
         # Rotation angle (in radians). Positive for 'e' (down), negative for 'q' (up)
@@ -88,12 +89,17 @@ def main():
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--views', type=str, default='multi', help='multi / single')
+    parser.add_argument('--controller', type=str, default='ai', help='me / ai')
     args = parser.parse_args()
     rr.script_setup(args, "27myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
+
+    if args.controller == 'ai':
+        sequence = generate_control()
+        print(f'ai sequence is... {sequence}')
 
     pts_3d = None
     image = None
@@ -149,7 +155,10 @@ def main():
         # --- get user input ---
         inpaint = False
         print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
-        user_input = get_keypress()
+        if args.controller == 'me':
+            user_input = get_keypress()
+        else:
+            user_input = sequence[idx]
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             world2cam = move_camera(world2cam, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
             print(f"{user_input} --> camera moved/rotated, extrinsics:\n", world2cam)
