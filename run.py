@@ -96,7 +96,10 @@ def main():
         # --- setup initial scene ---
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
-            prompt = 'a high-resolution photo of a large kitchen.'
+            #prompt = 'a high-resolution photo of a large kitchen.'
+            #prompt = 'A high-resolution photograph of a kitchen. Soft lighting. Cinematic lighting. Trending on  high-resolution photograph of a kitchen. A homoerotic, by Larry Elmore Kerlaft and Tom Byerley Hiatt, cgsociety,Perfect symmetry, dim volumetric lighting, 8k octane beautifully detailed render, post-processing, extremely hyperdetailed, intricate, epic composition, grim yet sparkling atmosphere, cinematic lighting + masterpiece, trending on artstation, very detailed, vibrant colors'
+            #prompt = "A high-resolution photograph of a kitchen. A blond man and a black woman look extremely old, sitting together on a vintage sofa in the middle of the room. The stars in the sky are very bright and there's something strange about the room. They are both sitting together. panorama, sharp focus, beautiful lighting, 4k, octane, trending on artstation"
+
             image = run_inpaint(torch.zeros(imsize, imsize, 3), torch.ones(imsize, imsize), prompt=prompt)
             mask_3d = torch.ones(imsize, imsize)
             all_images = [image]
