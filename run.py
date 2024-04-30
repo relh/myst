@@ -13,14 +13,15 @@ import tty
 from argparse import ArgumentParser
 
 import rerun as rr  # pip install rerun-sdk
-from pytorch3d.renderer import PerspectiveCameras, OrthographicCameras
+from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 
-from metric_depth import img_to_pts_3d_da
-from metric_dust import img_to_pts_3d_dust
 from misc.camera import pts_3d_to_img_raster, pts_cam_to_world
+from misc.da_3d import img_to_pts_3d_da
+from misc.dust_3d import img_to_pts_3d_dust
 from misc.imutils import fill
 from misc.inpaint import run_inpaint
 from misc.merge import merge_and_filter
+from misc.prompt import generate_prompt
 from misc.prune import density_pruning_py3d
 from misc.renderer import pts_3d_to_img_py3d
 from misc.scale import project_and_scale_points
@@ -97,8 +98,7 @@ def main():
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
             #prompt = 'a high-resolution photo of a large kitchen.'
-            #prompt = 'A high-resolution photograph of a kitchen. Soft lighting. Cinematic lighting. Trending on  high-resolution photograph of a kitchen. A homoerotic, by Larry Elmore Kerlaft and Tom Byerley Hiatt, cgsociety,Perfect symmetry, dim volumetric lighting, 8k octane beautifully detailed render, post-processing, extremely hyperdetailed, intricate, epic composition, grim yet sparkling atmosphere, cinematic lighting + masterpiece, trending on artstation, very detailed, vibrant colors'
-            #prompt = "A high-resolution photograph of a kitchen. A blond man and a black woman look extremely old, sitting together on a vintage sofa in the middle of the room. The stars in the sky are very bright and there's something strange about the room. They are both sitting together. panorama, sharp focus, beautiful lighting, 4k, octane, trending on artstation"
+            prompt = generate_prompt()
 
             image = run_inpaint(torch.zeros(imsize, imsize, 3), torch.ones(imsize, imsize), prompt=prompt)
             mask_3d = torch.ones(imsize, imsize)
@@ -212,5 +212,3 @@ if __name__ == "__main__":
     ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     #ps.print_stats()
     #print(s.getvalue())
-
-
