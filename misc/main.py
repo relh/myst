@@ -25,6 +25,7 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn as nn
 from cohesiv import COHESIV
+from dataset import Coherence_Dataset
 from mmcv.runner import build_optimizer
 from models import resnet
 from models.N3F.feature_extractor.lib.baselines import get_model
@@ -35,8 +36,6 @@ from torch.cuda.amp import GradScaler
 from torch.nn.parallel import DistributedDataParallel
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, DistributedSampler, SequentialSampler
-
-from dataset import Coherence_Dataset
 
 warnings.filterwarnings("ignore")
 random.seed(30)

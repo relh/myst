@@ -13,6 +13,7 @@ from pytorch3d.renderer import (NormWeightedCompositor,
                                 PointsRenderer)
 from pytorch3d.structures import Pointclouds
 
+
 def pts_world_to_cam(pts_3d, extrinsics):
     pts_homo = torch.cat((pts_3d, torch.ones(pts_3d.shape[0], 1, device=pts_3d.device)), dim=1).T
     pts_cam = extrinsics @ pts_homo 

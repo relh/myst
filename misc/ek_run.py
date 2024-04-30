@@ -16,10 +16,10 @@ import torch
 import torch.nn.functional as F
 from PIL import Image
 from transformers import pipeline
-from utils import *
 
-from ek_fields_utils.colmap_rw_utils import read_model
 from misc.colab import run_inpainting_pipeline
+from misc.colmap_rw_utils import read_model
+from misc.utils import *
 
 
 def read_and_log_sparse_reconstruction(dataset_path: Path, filter_output: bool, resize: tuple[int, int] | None) -> None:

@@ -13,21 +13,12 @@ sys.path.append('depth_anything/metric_depth/')
 from depth_anything.metric_depth.zoedepth.models.builder import build_model
 from depth_anything.metric_depth.zoedepth.utils.config import get_config
 
-# Global settings
-FL = 715.0873
-FY = 256 * 1.0
-FX = 256 * 1.0
-NYU_DATA = False
-FINAL_HEIGHT = 512 # 256
-FINAL_WIDTH = 512 # 256
-DATASET = 'nyu' # Lets not pick a fight with the model's dataloader
-
 model = None
 
 def img_to_pts_3d_da(color_image, views=None):
     global model
     if model is None:
-        config = get_config('zoedepth', "eval", DATASET)
+        config = get_config('zoedepth', "eval", 'nyu')
         config.pretrained_resource = 'local::./checkpoints/depth_anything_metric_depth_indoor.pt'
         model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
         model.eval()
@@ -38,7 +29,7 @@ def img_to_pts_3d_da(color_image, views=None):
     color_image = Image.fromarray(color_image.cpu().numpy())
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
 
-    pred = model(image_tensor, dataset=DATASET)
+    pred = model(image_tensor, dataset='nyu')
     if isinstance(pred, dict):
         pred = pred.get('metric_depth', pred.get('out'))
     elif isinstance(pred, (list, tuple)):
@@ -46,13 +37,13 @@ def img_to_pts_3d_da(color_image, views=None):
     pred = pred.squeeze().detach().cpu().numpy()
 
     # Resize color image and depth to final size
-    resized_color_image = color_image.resize((FINAL_WIDTH, FINAL_HEIGHT), Image.LANCZOS)
-    resized_pred = Image.fromarray(pred).resize((FINAL_WIDTH, FINAL_HEIGHT), Image.NEAREST)
+    resized_color_image = color_image.resize((original_width, original_height), Image.LANCZOS)
+    resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
 
-    focal_length_x, focal_length_y = (FX, FY) if not NYU_DATA else (FL, FL)
-    x, y = np.meshgrid(np.arange(FINAL_WIDTH), np.arange(FINAL_HEIGHT))
-    x = (x - FINAL_WIDTH / 2.0) / focal_length_x
-    y = (y - FINAL_HEIGHT / 2.0) / focal_length_y
+    focal_length_x, focal_length_y = (256.0, 256.0)
+    x, y = np.meshgrid(np.arange(original_width), np.arange(original_height))
+    x = (x - original_width / 2.0) / focal_length_x
+    y = (y - original_height / 2.0) / focal_length_y
     z = np.array(resized_pred)
 
     # Compute 3D points in camera coordinates

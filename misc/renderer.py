@@ -12,6 +12,7 @@ from pytorch3d.structures import Pointclouds
 
 from misc.camera import pts_world_to_cam
 
+
 def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras):
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 
