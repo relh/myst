@@ -3,6 +3,7 @@
 
 import random
 
+
 def read_file(file_path):
     """Read lines from a given file and return them as a list."""
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -19,7 +20,7 @@ backgrounds = read_file('./prompts/backgrounds.txt')
 
 def generate_prompt():
     """Generate a random prompt using loaded data."""
-    scene = random.choice(outdoor_scenes + indoor_scenes)  # Combining outdoor and indoor scenes
+    scene = random.choice(indoor_scenes) # + outdoor_scenes) #Combining outdoor and indoor scenes
     obj = random.choice(objects)
     arrangement = random.choice(arrangements)
     background = random.choice(backgrounds)
@@ -35,4 +36,3 @@ def generate_prompt():
 if __name__ == "__main__":
     # Generate and print a sample prompt
     print(generate_prompt())
-

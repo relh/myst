@@ -55,9 +55,17 @@ def move_camera(extrinsics, direction, amount):
         amount = 0.1 * (-amount if direction == 'w' else amount)
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
     elif direction in ['q', 'e']:
-        # Direction vector for up/down 
-        amount = 0.1 * (-amount if direction == 'q' else amount)
-        extrinsics[:3, 3] += torch.tensor([0, amount, 0], device=extrinsics.device).float()
+        # Rotation angle (in radians). Positive for 'e' (down), negative for 'q' (up)
+        angle = torch.tensor(-amount if direction == 'e' else amount)
+        # Rotation matrix around the X-axis (assuming X is forward/backward)
+        rotation_matrix = torch.tensor([
+            [1, 0, 0, 0],
+            [0, torch.cos(angle), -torch.sin(angle), 0],
+            [0, torch.sin(angle), torch.cos(angle), 0],
+            [0, 0, 0, 1]
+        ], device=extrinsics.device)
+        # Apply rotation to the extrinsics matrix
+        extrinsics = torch.matmul(rotation_matrix, extrinsics)
     elif direction in ['a', 'd']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
         angle = torch.tensor(-amount if direction == 'd' else amount)
@@ -81,7 +89,7 @@ def main():
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--views', type=str, default='multi', help='multi / single')
     args = parser.parse_args()
-    rr.script_setup(args, "26myst")
+    rr.script_setup(args, "27myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
 
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust

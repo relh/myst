@@ -76,17 +76,15 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     if pipeline is None:
         initialize_pipeline()
         strength = pipeline.initial_strength
-        seed = 78631 #50618
-        #seed = random.randint(0, 99999)
+        #seed = 78631 
     else:
         strength = pipeline.next_strength 
-        seed = random.randint(0, 99999)
+    seed = random.randint(0, 99999)
     #print(f'seed is.. {seed}')
     generator = torch.Generator(device="cuda").manual_seed(seed)
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
     #mask_image = pipeline.mask_processor.blur(mask_image, blur_factor=33)
 
-    #'''
     output = pipeline(
       prompt=prompt,
       negative_prompt='blurry, low-resolution',
@@ -97,18 +95,6 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
       strength=strength,  # make sure to use `strength` below 1.0
       generator=generator,
     )
-    #'''
-    '''
-    output = pipeline(
-        prompt=prompt,
-        image=image,
-        mask_image=mask_image,
-        height=512,
-        width=512,
-        generator=generator,
-        strength=strength
-    )
-    '''
 
     output_image = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
     output_image = F.interpolate(output_image, size=(512, 512), mode='nearest')
@@ -119,7 +105,6 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
         to_unpad_w = int((288 - 256) / 2)
         output_image = output_image[:, :, to_unpad_w:-to_unpad_w, to_unpad_h:-to_unpad_h]
     return rearrange(output_image, '1 c h w -> h w c').to(torch.uint8)
-
 
 # You might want to initialize the pipeline when the script is imported
 # But it can also be lazily initialized on the first call to run_inpainting_pipeline
