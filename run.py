@@ -106,8 +106,8 @@ def main(args, meta_idx):
         # --- setup initial scene ---
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
-            prompt = 'a high-resolution photo of a large kitchen.'
-            #prompt = generate_prompt()
+            #prompt = 'a high-resolution photo of a large kitchen.'
+            prompt = generate_prompt()
             print(prompt)
 
             with torch.no_grad():
