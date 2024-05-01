@@ -1,19 +1,7 @@
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
-pkill python
-python run.py
+#!/bin/bash
+
+for i in {1..35}
+do
+  python run.py
+  pkill python
+done

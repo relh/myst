@@ -231,8 +231,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='raster', help='raster / py3d')
-    parser.add_argument('--views', type=str, default='multi', help='multi / single')
+    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--controller', type=str, default='ai', help='me / ai')
     args = parser.parse_args()
 
