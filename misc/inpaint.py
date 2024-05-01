@@ -66,7 +66,7 @@ def initialize_pipeline():
     pipeline.next_strength = 1.0
 
     #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
-    #pipeline.enable_xformers_memory_efficient_attention()
+    pipeline.enable_xformers_memory_efficient_attention()
     pipeline = pipeline.to("cuda")
 
 
@@ -76,10 +76,10 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     if pipeline is None:
         initialize_pipeline()
         strength = pipeline.initial_strength
-        #seed = 78631 
+        seed = 78631 
     else:
         strength = pipeline.next_strength 
-    seed = random.randint(0, 99999)
+        seed = random.randint(0, 99999)
     #print(f'seed is.. {seed}')
     generator = torch.Generator(device="cuda").manual_seed(seed)
     image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
@@ -87,24 +87,26 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
 
     output = pipeline(
       prompt=prompt,
-      negative_prompt='blurry, low-resolution',
+      negative_prompt=
+        'blurry, low-resolution, pixelated, distorted, fuzzy, smeared, muddled,\
+        unclear, poorly lit, undefined, flat, artifacts, compression artifacts, low fidelity',
       image=image,
       mask_image=mask_image,
-      guidance_scale=8.0,
-      num_inference_steps=25,  # steps between 15 and 30 work well for us
+      guidance_scale=4.0,
+      num_inference_steps=50,  # steps between 15 and 30 work well for us
       strength=strength,  # make sure to use `strength` below 1.0
       generator=generator,
     )
 
-    output_image = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
-    output_image = F.interpolate(output_image, size=(512, 512), mode='nearest')
-    output_image = output_image[:, :, pad_h:(None if pad_h == 0 else -pad_h), pad_w:(None if pad_w == 0 else -pad_w)]
+    output = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
+    output = F.interpolate(output, size=(512, 512), mode='nearest')
+    output = output[:, :, pad_h:(None if pad_h == 0 else -pad_h), pad_w:(None if pad_w == 0 else -pad_w)]
 
     if pad_h > 0 and pad_w > 0:
         to_unpad_h = int((512 - 456) / 2)
         to_unpad_w = int((288 - 256) / 2)
-        output_image = output_image[:, :, to_unpad_w:-to_unpad_w, to_unpad_h:-to_unpad_h]
-    return rearrange(output_image, '1 c h w -> h w c').to(torch.uint8)
+        output = output[:, :, to_unpad_w:-to_unpad_w, to_unpad_h:-to_unpad_h]
+    return rearrange(output, '1 c h w -> h w c')
 
 # You might want to initialize the pipeline when the script is imported
 # But it can also be lazily initialized on the first call to run_inpainting_pipeline

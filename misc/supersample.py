@@ -99,7 +99,7 @@ def initialize_pipeline():
     pipeline.vae.scaling_factor=0.08333
 
     #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
-    #pipeline.enable_xformers_memory_efficient_attention()
+    pipeline.enable_xformers_memory_efficient_attention()
     pipeline = pipeline.to("cuda")
 
 
@@ -118,11 +118,10 @@ def run_supersample(image: Image, mask_image: Image, prompt: str):
         num_inference_steps=10,
     )
 
-    output_image = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
-    output_image = F.interpolate(output_image, size=(1024, 1024), mode='nearest')
-    output_image = output_image[:, :, pad_h:(None if pad_h == 0 else -pad_h), pad_w:(None if pad_w == 0 else -pad_w)]
-
-    return rearrange(output_image, '1 c h w -> h w c').to(torch.uint8)
+    output = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
+    output = F.interpolate(output, size=(512, 512), mode='nearest')
+    output = output[:, :, pad_h:(None if pad_h == 0 else -pad_h), pad_w:(None if pad_w == 0 else -pad_w)]
+    return rearrange(output, '1 c h w -> h w c').to(torch.uint8)
 
 
 # You might want to initialize the pipeline when the script is imported

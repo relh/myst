@@ -10,7 +10,11 @@ def generate_control():
     trans = random.choice(['w', 's', 's', 's'])
 
     rot_num = random.choice([2, 3, 4, 5, 6, 7]) 
-    trans_num = random.choice([2, 3, 4])
+
+    if trans == 'w':
+        trans_num = random.choice([1, 2])
+    else:
+        trans_num = random.choice([2, 3, 4])
 
     sequence = [rot] * rot_num + [trans] * trans_num + ['f']
     return sequence

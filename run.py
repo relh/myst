@@ -29,7 +29,7 @@ from misc.prompt import generate_prompt
 from misc.prune import density_pruning_py3d
 from misc.renderer import pts_3d_to_img_py3d
 from misc.scale import project_and_scale_points
-from misc.supersample import run_supersample
+from misc.supersample import run_supersample, supersample_point_cloud
 from misc.write import write_inference_html
 
 
@@ -97,30 +97,34 @@ def main(args, meta_idx):
         sequence = generate_control()
         print(f'ai sequence is... {sequence}')
 
+    cameras = None
     pts_3d = None
     image = None
-    imsize = 512
+    size = 512
     idx = 0
     while True:
-        idx += 1
-
         # --- setup initial scene ---
         if image is None: 
             #prompt = input(f"enter stable diffusion initial scene: ")
-            #prompt = 'a high-resolution photo of a large kitchen.'
-            prompt = generate_prompt()
+            prompt = 'a high-resolution photo of a large kitchen.'
+            #prompt = generate_prompt()
             print(prompt)
 
-            image = run_inpaint(torch.zeros(imsize, imsize, 3), torch.ones(imsize, imsize), prompt=prompt)
-            mask_3d = torch.ones(imsize, imsize)
-            all_images = [image]
+            with torch.no_grad():
+                image = run_inpaint(torch.zeros(size, size, 3),\
+                                    torch.ones(size, size),\
+                                    prompt=prompt).to(torch.uint8)
+            mask = torch.ones(size, size)
+            #with torch.no_grad():
+            #    image = run_supersample(image, mask, prompt)
+            all_images = [image.detach()]
         else:
             image = gen_image.to(torch.uint8)
             image[image.sum(dim=2) < 10] = 0.0
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images, None, None)
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics = img_to_pts_3d(all_images, None, None)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---
@@ -132,7 +136,7 @@ def main(args, meta_idx):
                     T=torch.zeros(1, 3),
                     focal_length=-intrinsics[0,0].unsqueeze(0),
                     principal_point=intrinsics[:2,2].unsqueeze(0),
-                    image_size=torch.ones(1, 2) * imsize,
+                    image_size=torch.ones(1, 2) * size,
                 )
 
         # --- rerun logging --- 
@@ -143,10 +147,10 @@ def main(args, meta_idx):
             rr.Transform3D(translation=see(world2cam[:3, 3]),
                            mat3x3=see(world2cam[:3, :3]), from_parent=True))
         inpy = see(intrinsics)
-        rr.log("world/camera/image", rr.Pinhole(resolution=[imsize, imsize], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
+        rr.log("world/camera/image", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/image", rr.Image(see(image)).compress(jpeg_quality=75))
-        rr.log("world/camera/mask", rr.Pinhole(resolution=[imsize, imsize], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
-        rr.log("world/camera/mask", rr.Image((torch.stack([mask_3d, mask_3d, mask_3d], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
+        rr.log("world/camera/mask", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
+        rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
         # --- get user input ---
         inpaint = False
@@ -165,10 +169,10 @@ def main(args, meta_idx):
         elif user_input.lower() == 'u':
             print(f"{user_input} --> upsample...")
             breakpoint()
-            pts_3d = supersample_point_cloud(pts_3d.to(device))
-            image = run_supersample(image, mask, prompt)
-            rgb_3d = torch.tensor(np.asarray(color_image[0])).float().to(device)
-            rgb_3d = supersample_point_cloud(rgb_3d).to(torch.uint8)
+            #pts_3d = supersample_point_cloud(pts_3d.to('cuda'))
+            #image = run_supersample(image, mask, prompt)
+            #rgb_3d = torch.tensor(np.asarray(color_image[0])).float().to('cuda')
+            #rgb_3d = supersample_point_cloud(rgb_3d).to(torch.uint8)
         elif user_input.lower() == 'k':
             print(f"{user_input} --> kill...")
             break
@@ -180,30 +184,35 @@ def main(args, meta_idx):
             inpaint = True
 
         # --- turn 3d points to image ---
-        gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (imsize, imsize), cameras)
+        gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras)
 
         if inpaint: 
             # --- inpaint pipeline ---
             gen_image = fill(gen_image)      # blur points to make a smooth image
             mask = gen_image.sum(dim=2) < 10
             gen_image[mask] = -1.0
-            sq_init = run_inpaint(gen_image, mask.float(), prompt=prompt)
+            with torch.no_grad():
+                gen_image[mask] = run_inpaint(gen_image, mask.float(), prompt=prompt)[mask]
             gen_image = gen_image.to(torch.uint8)
-            gen_image[mask] = sq_init[mask]
+            #with torch.no_grad():
+            #    gen_image = run_supersample(gen_image, mask, prompt)
 
             # --- add to duster list ---
-            all_images.append(gen_image)
+            all_images.append(gen_image.detach())
             all_cam2world.append(torch.linalg.inv(world2cam))
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm=dm)
+            pts_3d, rgb_3d, world2cam, all_cam2world, _ = img_to_pts_3d(all_images, all_cam2world, intrinsics)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+
+        idx += 1
     rr.script_teardown(args)
 
     if args.controller == 'ai':
         data = {'meta_idx': meta_idx,\
                 'prompt': prompt,\
                 'sequence': sequence}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
+
         start = Image.fromarray(all_images[0].cpu().numpy())
         end = Image.fromarray(all_images[-1].cpu().numpy())
 
@@ -222,13 +231,13 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
+    parser.add_argument('--renderer', type=str, default='raster', help='raster / py3d')
     parser.add_argument('--views', type=str, default='multi', help='multi / single')
     parser.add_argument('--controller', type=str, default='ai', help='me / ai')
     args = parser.parse_args()
 
-    #with torch.no_grad():
     #with torch.autocast(device_type="cuda"):
+    #with torch.no_grad():
     pickles = sorted([x for x in os.listdir('./outputs/pickles/') if 'pkl' in x], key=lambda x: int(x.split('.')[0]))
     how_far = 0
     if len(pickles) > 0: 
@@ -237,3 +246,5 @@ if __name__ == "__main__":
     # OOM after 130 or so
     for meta_idx in range(100):
         main(args, meta_idx+how_far)  
+        break
+        #breakpoint()

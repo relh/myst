@@ -142,14 +142,14 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
     intrinsics = use(scene.get_intrinsics()[-1])
     pts_3d = use(torch.stack(scene.get_pts3d()))
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
-    depth_maps = scene.get_depthmaps()
+    #depth_maps = scene.get_depthmaps()
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
            world2cam,\
            all_cam2world,\
            intrinsics,\
-           depth_maps
+           #depth_maps
             
 
 
