@@ -3,11 +3,10 @@ Traditional tea room with intricate tatami mat designs leading to a low table.
 Bright art studio filled with canvases, with distant views of a busy street.
 High-tech server room with rows of blinking servers extending into the background.
 Bustling commercial kitchen with chefs at work and a busy dining area visible beyond.
-Sleek modern bathroom with a reflective freestanding tub showing the adjoining bedroom.
+Sleek modern bathroom with a ceramic freestanding tub and the adjoining bedroom.
 Lush indoor botanical garden with pathways leading to a secluded pond.
 Retro diner with vibrant neon signs and deep booths receding into the space.
 Quaint bookstore with deep, floor-to-ceiling shelves winding into a reading nook.
-Spacious yoga studio with mirrors reflecting the stretch of minimalistic decor.
 Luxurious hotel lobby with a grand staircase leading to upper-floor balconies.
 Old-fashioned classroom with rows of wooden desks leading to a large blackboard.
 Underground wine cellar with long rows of dusty bottles disappearing into the darkness.
@@ -16,9 +15,8 @@ Minimalist living room with a large window showing a bustling city beyond.
 Elegant ballroom with sparkling chandeliers and a dance floor extending to a grand piano.
 Industrial loft with exposed brick and beams stretching to distant walls.
 Cozy attic bedroom with beams leading the eye to a quaint window seat.
-Opulent theater with rows of red velvet curtains leading to a distant stage.
-Modern gym with rows of equipment fading into a mirrored wall.
-Classic barbershop with a row of vintage barber chairs and a reflective bar mirror.
+Modern gym with rows of equipment fading into a locker room.
+Classic barbershop with a row of vintage barber chairs.
 Contemporary art gallery with a long corridor lined with abstract paintings.
 Rustic cabin living room with a stone fireplace and windows showing distant woods.
 Busy laundromat with rows of washing machines leading to a back exit.
@@ -27,13 +25,11 @@ Bright florist shop with deep shelves of bouquets stretching to a workshop area.
 Classic courtroom with rows of seating leading to an elevated judge's bench.
 Old-world bakery with a counter extending back to ovens and bakers at work.
 Stylish cocktail bar with a long bar leading to a backlit liquor display.
-Minimalist entryway with a mirror reflecting a long, art-lined hallway.
-Vintage record store with bins of vinyl extending to a listening station.
+Minimalist entryway with a busy foyer and long, art-lined hallway.
 Sunlit conservatory with plants leading the eye to a central fountain.
 Trendy coffee shop with a counter that extends to a cozy back seating area.
 Neon-lit arcade with rows of game machines leading to a prize counter.
 Calm meditation room with cushions arrayed towards a serene altar.
-Energetic dance studio with a mirrored wall reflecting a barre and distant windows.
 Warm pottery studio with shelves of pottery leading to a kiln area.
 Serene chapel with rows of pews leading to a stained-glass altar.
 Industrial garage workshop with tools and workbenches leading to a garage door.
@@ -42,14 +38,13 @@ Rustic farmhouse kitchen with a long wooden table leading to a pantry.
 Spacious conference room with a long table leading to a presentation screen.
 Boutique clothing store with racks of clothes leading to fitting rooms.
 Cozy basement home theater with rows of seats leading to a large screen.
-Lavish dressing room with mirrors reflecting a variety of elegant outfits.
+Lavish dressing room with a variety of elegant outfits.
 Busy veterinary clinic with a reception desk leading to treatment rooms.
 Traditional carpenter’s workshop with workbenches and tools extending into storage.
 Sleek hair salon with styling stations leading to a backwash area.
 Crowded sports bar with TVs lining the walls leading to a game room.
 Contemporary bedroom with a bed facing large windows showing a night view.
 Quirky gift shop with eclectic items leading to a craft workshop area.
-Ornate opera house with balcony seating leading to a majestic stage.
 Luxurious spa with a tranquil reception leading to individual treatment rooms.
 Compact studio apartment with efficient use of space showing distinct living areas.
 Gothic study with bookshelves leading to a large desk with a reading lamp.
@@ -58,3 +53,53 @@ Industrial brewery with steel vats lined up leading to a tasting room.
 Festive wedding hall with tables leading to a beautifully decorated altar.
 Modern pharmacy with aisles of products leading to a consultation counter.
 Spacious art deco lobby with bold geometric patterns leading to elevators.
+Grand library hall with towering bookshelves leading to a grand reading area.
+Open-plan advertising agency with desks leading to large windows overlooking the city.
+Luxury penthouse suite with a living area extending to a panoramic terrace.
+Modern dance rehearsal studio with mirrors reflecting dancers extending back.
+Large-scale brewery with fermenting tanks leading to a quality control area.
+Historical museum exhibit hall with artifacts displayed leading to interactive displays.
+Underground speakeasy with a hidden bar behind a movable bookshelf.
+Multilevel shopping mall with escalators descending into a central atrium.
+High-end jewelry store with secure display cases leading to a VIP consultation booth.
+Spacious aquarium with tanks leading to a deep ocean tunnel exhibit.
+Film production studio with sets extending to a control room in the back.
+Large airport terminal with check-in counters leading to gates visible in the distance.
+Indoor ski lodge with a faux snowy slope leading to a cozy lodge area.
+Multi-sport complex with courts visible from an overhead walking track.
+Deluxe recording studio with a control room visible through soundproof glass.
+Virtual reality gaming arcade with various booths extending into a lounge area.
+Futuristic data center with rows of illuminated data racks extending to a control station.
+Opera training facility with practice rooms leading to a main rehearsal hall.
+Corporate law office with a lobby extending to conference rooms along a corridor.
+Designer fashion atelier with workstations leading to a runway practice area.
+Artisan chocolate shop with preparation areas leading to a tasting room.
+Indoor botanical research center with experimental zones visible behind glass.
+High-tech startup hub with open work areas leading to pitch spaces.
+Luxury watchmaker’s workshop with crafting tables leading to an assembly room.
+Themed restaurant with a dining area extending to a themed bar.
+Historical archive with rows of documents leading to a restoration lab.
+Animation studio with artists' desks leading to a screening room.
+Indoor climbing gym with walls of varying difficulty leading to a training area.
+Music school with individual practice pods leading to a central concert hall.
+Art deco cinema with a lobby leading to multiple theater entrances.
+Indoor market with vendor stalls leading to a central dining pavilion.
+Corporate headquarters with a foyer leading to an executive wing.
+Digital art gallery with interactive screens leading to a virtual reality zone.
+High-fashion showroom with collections displayed leading to a private viewing area.
+Architectural firm with model displays leading to a design workshop.
+Indoor go-kart track with pits leading to a spectator area.
+Culinary school with teaching kitchens opening to a demonstration dining hall.
+Eco-friendly co-working space with living green walls leading to meeting pods.
+Pet daycare with play areas leading to grooming stations.
+Travel agency with destination displays leading to consultation desks.
+Indoor herb garden with planters leading to an herbal apothecary shop.
+Toy store with aisles of toys leading to an interactive play area.
+Modern train station with platforms visible from an overhead bridge.
+College cafeteria with food stations extending to seating areas.
+Startup accelerator space with collaborative areas leading to pitch stages.
+Indoor sports bar with game viewing areas leading to private party rooms.
+Historical reenactment venue with period settings leading to an educational center.
+Interior design studio with sample rooms leading to a materials library.
+Fashion design college with workshops leading to a student design showcase area.
+Urban art studio with graffiti walls extending to an art supply shop.

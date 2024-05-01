@@ -18,11 +18,14 @@ def write_inference_html(all_data):
             if meta_idx == 0:
                 for z, x in enumerate(data.keys()):
                     f.write(f'<th>{x} <input type="checkbox" onchange="hideColumn({z+1});"></th>')
+                f.write(f'<th>start <input type="checkbox" onchange="hideColumn({z+2});"></th>')
+                f.write(f'<th>end <input type="checkbox" onchange="hideColumn({z+3});"></th>')
                 f.write(f'</tr></thead><tbody>')
 
-            f.write(f'<tr><td><div><span style="width: 2vw;">{str(meta_idx)}</span></div></td>')
-            f.write(f'<td><div>{data["prompt"]}</div></td>')
-            f.write(f'<td><div>{data["sequence"]}</div></td>')
+            f.write(f'<tr>')
+            f.write(f'<td>{str(meta_idx)}</td>')
+            f.write(f'<td>{data["prompt"]}</td>')
+            f.write(f'<td>{data["sequence"]}</td>')
             f.write(f'<td><div><img class="lazy" onerror="this.onerror=null; this.remove();" data-src="/~relh/mysty/imgs/{meta_idx}_start.png"></div></td>')
             f.write(f'<td><div><img class="lazy" onerror="this.onerror=null; this.remove();" data-src="/~relh/mysty/imgs/{meta_idx}_end.png"></div></td>')
             f.write('</tr>')
