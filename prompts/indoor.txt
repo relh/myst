@@ -1,7 +1,7 @@
 Modern home office with expansive cityscape views through floor-to-ceiling windows.
 Traditional tea room with intricate tatami mat designs leading to a low table.
 Bright art studio filled with canvases, with distant views of a busy street.
-High-tech server room with rows of blinking servers extending into the background.
+High-tech robotic workshop with rows of blinking pits extending into a scenic overlook.
 Bustling commercial kitchen with chefs at work and a busy dining area visible beyond.
 Sleek modern bathroom with a ceramic freestanding tub and the adjoining bedroom.
 Lush indoor botanical garden with pathways leading to a secluded pond.
@@ -56,17 +56,17 @@ Spacious art deco lobby with bold geometric patterns leading to elevators.
 Grand library hall with towering bookshelves leading to a grand reading area.
 Open-plan advertising agency with desks leading to large windows overlooking the city.
 Luxury penthouse suite with a living area extending to a panoramic terrace.
-Modern dance rehearsal studio with mirrors reflecting dancers extending back.
+Dilapidated modern dance rehearsal studio.
 Large-scale brewery with fermenting tanks leading to a quality control area.
 Historical museum exhibit hall with artifacts displayed leading to interactive displays.
 Underground speakeasy with a hidden bar behind a movable bookshelf.
 Multilevel shopping mall with escalators descending into a central atrium.
-High-end jewelry store with secure display cases leading to a VIP consultation booth.
+High-end jewelry store with secure display cases leading to a secure VIP consultation booth.
 Spacious aquarium with tanks leading to a deep ocean tunnel exhibit.
 Film production studio with sets extending to a control room in the back.
 Large airport terminal with check-in counters leading to gates visible in the distance.
 Indoor ski lodge with a faux snowy slope leading to a cozy lodge area.
-Multi-sport complex with courts visible from an overhead walking track.
+Indoor multi-sport complex with courts visible looking down from an overhead walking track.
 Deluxe recording studio with a control room visible through soundproof glass.
 Virtual reality gaming arcade with various booths extending into a lounge area.
 Futuristic data center with rows of illuminated data racks extending to a control station.
@@ -79,7 +79,7 @@ High-tech startup hub with open work areas leading to pitch spaces.
 Luxury watchmaker’s workshop with crafting tables leading to an assembly room.
 Themed restaurant with a dining area extending to a themed bar.
 Historical archive with rows of documents leading to a restoration lab.
-Animation studio with artists' desks leading to a screening room.
+Empty animation studio with artists' desks leading to a screening room.
 Indoor climbing gym with walls of varying difficulty leading to a training area.
 Music school with individual practice pods leading to a central concert hall.
 Art deco cinema with a lobby leading to multiple theater entrances.
@@ -87,8 +87,7 @@ Indoor market with vendor stalls leading to a central dining pavilion.
 Corporate headquarters with a foyer leading to an executive wing.
 Digital art gallery with interactive screens leading to a virtual reality zone.
 High-fashion showroom with collections displayed leading to a private viewing area.
-Architectural firm with model displays leading to a design workshop.
-Indoor go-kart track with pits leading to a spectator area.
+Architectural office with numerous model displays and a workshop.
 Culinary school with teaching kitchens opening to a demonstration dining hall.
 Eco-friendly co-working space with living green walls leading to meeting pods.
 Pet daycare with play areas leading to grooming stations.
@@ -101,5 +100,5 @@ Startup accelerator space with collaborative areas leading to pitch stages.
 Indoor sports bar with game viewing areas leading to private party rooms.
 Historical reenactment venue with period settings leading to an educational center.
 Interior design studio with sample rooms leading to a materials library.
-Fashion design college with workshops leading to a student design showcase area.
+Empty fashion design college with exhibits leading to a tiled empty grecian bath.
 Urban art studio with graffiti walls extending to an art supply shop.

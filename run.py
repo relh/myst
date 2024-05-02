@@ -245,5 +245,4 @@ if __name__ == "__main__":
     # OOM after 130 or so
     for meta_idx in range(100):
         main(args, meta_idx+how_far)  
-        break
         #breakpoint()

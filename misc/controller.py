@@ -7,9 +7,9 @@ def generate_control():
     # choose from moving and new prompts
     # choose 4-9 1
     rot = random.choice(['a', 'd'])
-    trans = random.choice(['w', 's', 's', 's'])
+    trans = random.choice(['w', 's'])
 
-    rot_num = random.choice([2, 3, 4, 5, 6, 7]) 
+    rot_num = random.choice([2, 3, 4, 5, 6]) 
 
     if trans == 'w':
         trans_num = random.choice([1, 2])

@@ -21,7 +21,7 @@ backgrounds = read_file('./prompts/backgrounds.txt')
 def generate_prompt():
     """Generate a random prompt using loaded data."""
     lead_in = random.choice(lead_ins)
-    scene = random.choice(indoor_scenes + outdoor_scenes) #Combining outdoor and indoor scenes
+    scene = random.choice(indoor_scenes)# + outdoor_scenes) #Combining outdoor and indoor scenes
     #obj = random.choice(objects)
     #arrangement = random.choice(arrangements)
     #background = random.choice(backgrounds)
