@@ -8,13 +8,14 @@ def read_file(file_path):
         return [line.strip() for line in file if line.strip()]
 
 # Load data from files
-lead_ins = read_file('./assets/prompts/leaders.txt')
-outdoor_scenes = read_file('./assets/prompts/outdoor.txt')
-indoor_scenes = read_file('./assets/prompts/indoor.txt')
-objects = read_file('./assets/prompts/objects.txt')
-arrangements = read_file('./assets/prompts/arrangement.txt')
-modifiers = read_file('./assets/prompts/modifiers.txt')
-backgrounds = read_file('./assets/prompts/backgrounds.txt')
+lead_ins = read_file('./prompts/leaders.txt')
+outdoor_scenes = read_file('./prompts/outdoor.txt')
+indoor_scenes = read_file('./prompts/indoor.txt')
+objects = read_file('./prompts/objects.txt')
+arrangements = read_file('./prompts/arrangement.txt')
+modifiers = read_file('./prompts/modifiers.txt')
+backgrounds = read_file('./prompts/backgrounds.txt')
+doors = read_file('./prompts/doors.txt')
 
 def generate_control():
     # choose from moving and new prompts 
@@ -46,6 +47,10 @@ def generate_prompt():
     #prompt += f" In the foreground, {obj} {arrangement} {background}."
     #prompt += f" This scene is rendered in a {modifier} style."
     return prompt
+
+def generate_doors():
+    """The Doors of Perception..."""
+    pass
 
 if __name__ == "__main__":
     # Generate and print a sample prompt

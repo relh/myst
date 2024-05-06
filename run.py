@@ -104,9 +104,9 @@ def main(args, meta_idx):
     while True:
         # --- setup initial scene ---
         if image is None: 
-            #prompt = input(f"enter stable diffusion initial scene: ")
+            prompt = input(f"enter stable diffusion initial scene: ")
             #prompt = 'a high-resolution photo of a large kitchen.'
-            prompt = generate_prompt()
+            #prompt = generate_prompt()
             print(prompt)
 
             with torch.no_grad():
@@ -231,7 +231,7 @@ if __name__ == "__main__":
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--controller', type=str, default='ai', help='me / ai')
+    parser.add_argument('--controller', type=str, default='me', help='me / ai')
     args = parser.parse_args()
 
     #with torch.autocast(device_type="cuda"):
