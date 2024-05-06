@@ -88,7 +88,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     output = pipeline(
       prompt=prompt,
       negative_prompt=
-        'blurry, low-resolution, pixelated, distorted, fuzzy, smeared, muddled,\
+        'blurry, low-resolution, pixelated, distorted, fuzzy, smeared, muddled, \
         unclear, poorly lit, undefined, flat, artifacts, compression artifacts, low fidelity',
       image=image,
       mask_image=mask_image,

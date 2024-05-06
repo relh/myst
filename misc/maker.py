@@ -16,12 +16,13 @@ arrangements = read_file('./prompts/arrangement.txt')
 modifiers = read_file('./prompts/modifiers.txt')
 backgrounds = read_file('./prompts/backgrounds.txt')
 doors = read_file('./prompts/doors.txt')
+facades = read_file('./prompts/facades.txt')
 
 def generate_control():
     # choose from moving and new prompts 
     # choose 4-9 1
     rot = random.choice(['a', 'd'])
-    trans = random.choice(['w', 's'])
+    trans = random.choice(['s'])
 
     rot_num = random.choice([2, 3, 4, 5, 6]) 
 
@@ -33,7 +34,7 @@ def generate_control():
     sequence = [rot] * rot_num + [trans] * trans_num + ['f']
     return sequence
 
-def generate_prompt():
+def generate_scene():
     """Generate a random prompt using loaded data."""
     lead_in = random.choice(lead_ins)
     scene = random.choice(indoor_scenes)# + outdoor_scenes) #Combining outdoor and indoor scenes
@@ -50,7 +51,13 @@ def generate_prompt():
 
 def generate_doors():
     """The Doors of Perception..."""
-    pass
+    lead_in = random.choice(lead_ins)
+    facade = random.choice(facades)# + doors) #Combining portals 
+    prompt = f"{lead_in} {facade.lower()}"
+    return prompt
+
+def generate_prompt():
+    return generate_doors()
 
 if __name__ == "__main__":
     # Generate and print a sample prompt

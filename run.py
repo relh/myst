@@ -104,9 +104,11 @@ def main(args, meta_idx):
     while True:
         # --- setup initial scene ---
         if image is None: 
-            prompt = input(f"enter stable diffusion initial scene: ")
-            #prompt = 'a high-resolution photo of a large kitchen.'
-            #prompt = generate_prompt()
+            if args.controller == 'ai':
+                orig_prompt = prompt = generate_prompt()
+                #prompt = 'a high-resolution photo of a large kitchen.'
+            else:
+                orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             print(prompt)
 
             with torch.no_grad():
@@ -165,6 +167,7 @@ def main(args, meta_idx):
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
             inpaint = True
+            #prompt = ''
         elif user_input.lower() == 'u':
             print(f"{user_input} --> upsample...")
             breakpoint()
@@ -184,10 +187,10 @@ def main(args, meta_idx):
 
         # --- turn 3d points to image ---
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras)
+        gen_image = fill(gen_image)      # blur points to make a smooth image
 
         if inpaint: 
             # --- inpaint pipeline ---
-            gen_image = fill(gen_image)      # blur points to make a smooth image
             mask = gen_image.sum(dim=2) < 10
             gen_image[mask] = -1.0
             with torch.no_grad():
@@ -209,7 +212,7 @@ def main(args, meta_idx):
 
     if args.controller == 'ai':
         data = {'meta_idx': meta_idx,\
-                'prompt': prompt,\
+                'prompt': orig_prompt,\
                 'sequence': sequence}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
 
         start = Image.fromarray(all_images[0].cpu().numpy())
