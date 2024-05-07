@@ -18,7 +18,7 @@ import rerun as rr  # pip install rerun-sdk
 from PIL import Image
 from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 
-from misc.maker import generate_control, generate_prompt
+from misc.maker import *
 from misc.camera import pts_3d_to_img_raster, pts_cam_to_world
 from misc.da_3d import img_to_pts_3d_da
 from misc.dust_3d import img_to_pts_3d_dust
@@ -92,7 +92,8 @@ def main(args, meta_idx):
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    if args.controller == 'ai':
+    sequence = None
+    if args.sequence == 'auto':
         sequence = generate_control()
         print(f'ai sequence is... {sequence}')
 
@@ -104,7 +105,7 @@ def main(args, meta_idx):
     while True:
         # --- setup initial scene ---
         if image is None: 
-            if args.controller == 'ai':
+            if args.prompter == 'ai':
                 orig_prompt = prompt = generate_prompt()
                 #prompt = 'a high-resolution photo of a large kitchen.'
             else:
@@ -156,8 +157,10 @@ def main(args, meta_idx):
         # --- get user input ---
         inpaint = False
         print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
-        if args.controller == 'me':
+        if args.prompter == 'me':
             user_input = get_keypress()
+        elif args.sequence == 'doors':
+            user_input = 'use doors'
         else:
             if idx >= len(sequence): break
             user_input = sequence[idx]
@@ -167,7 +170,7 @@ def main(args, meta_idx):
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
             inpaint = True
-            #prompt = ''
+            prompt = ''
         elif user_input.lower() == 'u':
             print(f"{user_input} --> upsample...")
             breakpoint()
@@ -181,6 +184,14 @@ def main(args, meta_idx):
         elif user_input.lower() == 'b':
             print(f"{user_input} --> breakpoint...")
             breakpoint()
+        elif user_input.lower() == 'use doors':
+            if sequence is None:
+                sequence = generate_door_control(world2cam, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
+            elif len(sequence) == 0:
+                break
+            else:
+                world2cam = sequence.pop(0)
+            inpaint = True
         else:
             prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
@@ -210,7 +221,7 @@ def main(args, meta_idx):
         idx += 1
     rr.script_teardown(args)
 
-    if args.controller == 'ai':
+    if args.prompter == 'ai':
         data = {'meta_idx': meta_idx,\
                 'prompt': orig_prompt,\
                 'sequence': sequence}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
@@ -234,7 +245,8 @@ if __name__ == "__main__":
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--controller', type=str, default='me', help='me / ai')
+    parser.add_argument('--prompter', type=str, default='ai', help='me / ai')
+    parser.add_argument('--sequence', type=str, default='doors', help='doors / auto')
     args = parser.parse_args()
 
     #with torch.autocast(device_type="cuda"):
