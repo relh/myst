@@ -56,7 +56,7 @@ def move_camera(extrinsics, direction, amount):
     
     if direction in ['w', 's']:
         # Direction vector for forward/backward 
-        amount = 0.5 * (-amount if direction == 'w' else amount)
+        amount = (-amount if direction == 'w' else amount)
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
     elif direction in ['q', 'e']:
         # Rotation angle (in radians). Positive for 'e' (down), negative for 'q' (up)
@@ -92,10 +92,12 @@ def main(args, meta_idx):
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    sequence = None
+    amount = 0.05
     if args.sequence == 'auto':
         sequence = generate_control()
-        print(f'ai sequence is... {sequence}')
+    elif args.sequence == 'doors':
+        sequence = None
+    print(f'ai sequence is... {sequence}')
 
     cameras = None
     pts_3d = None
@@ -107,7 +109,7 @@ def main(args, meta_idx):
         if image is None: 
             if args.prompter == 'ai':
                 orig_prompt = prompt = generate_prompt()
-                #prompt = 'a high-resolution photo of a large kitchen.'
+                #orig_prompt = prompt = 'A high-resolution image of a door.'
             else:
                 orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             print(prompt)
@@ -159,13 +161,13 @@ def main(args, meta_idx):
         print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
         if args.prompter == 'me':
             user_input = get_keypress()
-        elif args.sequence == 'doors':
-            user_input = 'use doors'
         else:
+            if sequence is None:
+                sequence = generate_door_control(pts_3d, world2cam)
             if idx >= len(sequence): break
-            user_input = sequence[idx]
+            user_input, amount = sequence[idx]
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
-            world2cam = move_camera(world2cam, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
+            world2cam = move_camera(world2cam, user_input.lower(), amount)  # Assuming an amount of 0.1 for movement/rotation
             print(f"{user_input} --> camera moved/rotated, extrinsics:\n", world2cam)
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
@@ -184,14 +186,6 @@ def main(args, meta_idx):
         elif user_input.lower() == 'b':
             print(f"{user_input} --> breakpoint...")
             breakpoint()
-        elif user_input.lower() == 'use doors':
-            if sequence is None:
-                sequence = generate_door_control(world2cam, user_input.lower(), 0.1)  # Assuming an amount of 0.1 for movement/rotation
-            elif len(sequence) == 0:
-                break
-            else:
-                world2cam = sequence.pop(0)
-            inpaint = True
         else:
             prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
@@ -259,4 +253,3 @@ if __name__ == "__main__":
     # OOM after 130 or so
     for meta_idx in range(100):
         main(args, meta_idx+how_far)  
-        #breakpoint()

@@ -4,7 +4,7 @@ import torch
 from pytorch3d.ops import knn_points
 
 
-def density_pruning_py3d(points, colors, nb_neighbors=9, std_ratio=3.5):
+def density_pruning_py3d(points, colors, nb_neighbors=9, std_ratio=2.0):
     # Ensure points and colors are on the same device and in float format
     points = points.float()
     
@@ -42,7 +42,7 @@ def density_pruning(points, colors):
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points.cpu().numpy())
     #pcd.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
-    _, ind = pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=3.0)
+    _, ind = pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=2.0)
     return points[ind], colors[ind]
 
 

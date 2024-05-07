@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import math
 import random
 import torch
-from pytorch3d.transforms import RotateAxisAngle, Translate
+from pytorch3d.transforms import Transform3d
 
 def read_file(file_path):
     """Read lines from a given file and return them as a list."""
@@ -45,32 +46,61 @@ def generate_doors():
 def generate_prompt():
     return generate_doors()
 
-def calculate_median_distance(point_cloud):
-    # Calculate the median distance of points in the point cloud from the origin
-    distances = torch.norm(point_cloud, dim=1)
-    return distances.median()
+def calculate_median_distance(point_cloud, camera_extrinsics):
+    """
+    Calculates the median distance from the camera to the points in the point cloud using world coordinates.
 
-def move_camera(initial_extrinsics, distance):
-    # Translate back to 2x the median distance
-    move_back = Translate((0, 0, distance))  # Moving additional 1x distance back
-    back_extrinsics = move_back.transform_matrix @ initial_extrinsics
+    Args:
+    - point_cloud (torch.Tensor): A tensor of shape (N, 3) containing the coordinates of the points in world coordinates.
+    - camera_extrinsics (torch.Tensor): A 4x4 tensor representing the camera extrinsic matrix that transforms points from world coordinates to camera coordinates.
 
-    # Translate left and rotate right
-    move_left = Translate((-distance, 0, 0))  # Moving 1x distance to the left
-    rotate_right = RotateAxisAngle(angle=45, axis="Y")
-    left_rotate_extrinsics = rotate_right.transform_matrix @ move_left.transform_matrix @ back_extrinsics
+    Returns:
+    - float: The median distance of the points from the camera.
+    """
+    # Extract camera position from the extrinsics matrix
+    # The camera position is the negative of the translation components of the matrix, transformed by the rotation part.
+    rotation_matrix = camera_extrinsics[:3, :3]
+    translation_vector = camera_extrinsics[:3, 3]
+    camera_position = -torch.matmul(rotation_matrix.transpose(0, 1), translation_vector)
 
-    # Move back to the center and then right and rotate left
-    move_right = Translate((distance, 0, 0))  # Moving 1x distance to the right
-    rotate_left = RotateAxisAngle(angle=-45, axis="Y")
-    right_rotate_extrinsics = rotate_left.transform_matrix @ move_right.transform_matrix @ back_extrinsics
-
-    return back_extrinsics, left_rotate_extrinsics, right_rotate_extrinsics
+    distances = torch.norm(point_cloud - camera_position, dim=1)
+    return distances.median().item()  # Convert to Python float for general use
 
 def generate_door_control(pts_3d, extrinsics):
-    median_distance = calculate_median_distance(point_cloud)
-    extrinsics_b, extrinsics_lrr, extrinsics_rrl = move_camera(extrinsics, median_distance)
-    return [extrinsics_b, extrinsics_lrr, extrinsics_rrl]
+    md = calculate_median_distance(pts_3d, extrinsics)
+    sequence = []
+
+    trans = md / 2.0
+    rot = math.pi / 3.0
+
+    for steps in [1, 2]:  
+        # 1. first move left or right 1x scene distance
+        motion = random.choice(['a', 'd'])
+        sequence.append((motion, math.pi / 2.0))
+        sequence.append(('s', trans))
+
+        # 2. orient to the scene again and fill
+        sequence.append((motion, -rot))
+        sequence.append(('f', None))
+
+        # 3. go to the other side and fill
+        sequence.append((motion, rot))
+        sequence.append(('w', trans))
+        sequence.append(('w', trans))
+        sequence.append((motion, -rot * 2.0))
+        sequence.append(('f', None))
+
+        sequence.append((motion, -rot * 1.0))
+        sequence.append(('w', trans))
+
+        sequence.append((motion, math.pi / 2.0))
+        sequence.append(('s', trans))
+        sequence.append(('f', None))
+
+    # 4. go to the middle and reverse again
+    #sequence.append('f', median_distance)
+
+    return sequence
 
 def generate_control():
     # choose from moving and new prompts 
@@ -86,7 +116,7 @@ def generate_control():
         trans_num = random.choice([2, 3, 4])
 
     sequence = [rot] * rot_num + [trans] * trans_num + ['f']
-    return sequence
+    return [(x, 0.05) for x in sequence]
 
 if __name__ == "__main__":
     # Generate and print a sample prompt
