@@ -108,9 +108,10 @@ def main(args, meta_idx):
         # --- setup initial scene ---
         if image is None: 
             if args.prompter == 'ai':
-                orig_prompt = prompt = generate_prompt()
-                #orig_prompt = prompt = 'A high-resolution image of a door.'
+                #orig_prompt = prompt = generate_prompt()
+                orig_prompt = prompt = 'A photorealistic kitchen.'
             else:
+                #orig_prompt = prompt = 'A photorealistic kitchen.'
                 orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             print(prompt)
 
@@ -129,7 +130,7 @@ def main(args, meta_idx):
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics = img_to_pts_3d(all_images, None, None)
-            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---
             if args.renderer == 'py3d':
@@ -172,7 +173,7 @@ def main(args, meta_idx):
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
             inpaint = True
-            prompt = ''
+            #prompt = ''
         elif user_input.lower() == 'u':
             print(f"{user_input} --> upsample...")
             breakpoint()
@@ -210,7 +211,7 @@ def main(args, meta_idx):
 
             # --- lift img to 3d ---
             pts_3d, rgb_3d, world2cam, all_cam2world, _ = img_to_pts_3d(all_images, all_cam2world, intrinsics)
-            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
         idx += 1
     rr.script_teardown(args)
@@ -239,8 +240,8 @@ if __name__ == "__main__":
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--prompter', type=str, default='ai', help='me / ai')
-    parser.add_argument('--sequence', type=str, default='doors', help='doors / auto')
+    parser.add_argument('--prompter', type=str, default='me', help='me / ai')
+    parser.add_argument('--sequence', type=str, default='auto', help='doors / auto')
     args = parser.parse_args()
 
     #with torch.autocast(device_type="cuda"):

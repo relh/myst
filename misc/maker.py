@@ -70,7 +70,7 @@ def generate_door_control(pts_3d, extrinsics):
     md = calculate_median_distance(pts_3d, extrinsics)
     sequence = []
 
-    trans = md / 2.0
+    trans = md / 3.0
     rot = math.pi / 3.0
 
     for steps in [1, 2]:  

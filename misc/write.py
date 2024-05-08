@@ -6,6 +6,14 @@ from collections import defaultdict
 
 from PIL import Image
 
+def br_insert(data):
+    row_len = len(data)
+    row = ''
+    for i, x in enumerate(data):
+        if row_len > 5 and i % (row_len // 5) == 0 and i != 0:
+            row += '<br>'
+        row += str(x)
+    return row
 
 def write_inference_html(all_data):
     with open(f'./outputs/index.html', 'w') as f:
@@ -19,16 +27,27 @@ def write_inference_html(all_data):
             if init is False:
                 for z, x in enumerate(data.keys()):
                     f.write(f'<th>{x} <input type="checkbox" onchange="hideColumn({z+1});"></th>')
-                f.write(f'<th>start <input type="checkbox" onchange="hideColumn({z+2});"></th>')
-                f.write(f'<th>end <input type="checkbox" onchange="hideColumn({z+3});"></th>')
+                f.write(f'<th>amount <input type="checkbox" onchange="hideColumn({z+2});"></th>')
+                f.write(f'<th>start <input type="checkbox" onchange="hideColumn({z+3});"></th>')
+                f.write(f'<th>end <input type="checkbox" onchange="hideColumn({z+4});"></th>')
                 f.write(f'</tr></thead><tbody>')
                 init = True
 
             meta_idx = int(data['meta_idx'])
+
+            prompt = [x + ' ' for x in data["prompt"].split(' ')]
+            sequence = [x for x in data["sequence"]]
+            if isinstance(sequence[0], tuple):
+                amount = [str(0.0) + ", " if x[1] is None else f"{x[1]:.2f}, " for x in sequence]
+                sequence = [x[0] + ', ' for x in sequence]
+            else:
+                amount = [0.1]
+                sequence = [x + ', ' for x in sequence]
             f.write(f'<tr>')
-            f.write(f'<td>{str(meta_idx)}</td>')
-            f.write(f'<td>{data["prompt"]}</td>')
-            f.write(f'<td>{data["sequence"]}</td>')
+            f.write(f'<td><div>{str(meta_idx)}</div></td>')
+            f.write(f'<td><div>{br_insert(prompt)}</div></td>')
+            f.write(f'<td><div>{br_insert(sequence)}</div></td>')
+            f.write(f'<td><div>{br_insert(amount)}</div></td>')
             f.write(f'<td><div><img class="lazy" onerror="this.onerror=null; this.remove();" data-src="/~relh/mysty/imgs/{meta_idx}_start.png"></div></td>')
             f.write(f'<td><div><img class="lazy" onerror="this.onerror=null; this.remove();" data-src="/~relh/mysty/imgs/{meta_idx}_end.png"></div></td>')
             f.write('</tr>')

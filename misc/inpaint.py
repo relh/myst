@@ -60,7 +60,9 @@ def initialize_pipeline():
     global pipeline
 
     pipeline = AutoPipelineForInpainting.from_pretrained(
-        "runwayml/stable-diffusion-inpainting", torch_dtype=torch.float16, variant="fp16"
+        #"runwayml/stable-diffusion-inpainting", 
+        "stabilityai/stable-diffusion-2-inpainting",
+        torch_dtype=torch.float16, variant="fp16"
     ).to("cuda")
     pipeline.initial_strength = 1.0
     pipeline.next_strength = 1.0
@@ -88,7 +90,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     output = pipeline(
       prompt=prompt,
       negative_prompt=
-        'blurry, low-resolution, pixelated, distorted, fuzzy, smeared, muddled, \
+        'blurry, low-resolution, pixelated, distorted, fuzzy, smeared, muddled, people, \
         unclear, poorly lit, undefined, flat, artifacts, compression artifacts, low fidelity',
       image=image,
       mask_image=mask_image,
