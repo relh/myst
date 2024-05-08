@@ -43,9 +43,6 @@ def generate_doors():
     prompt = f"{lead_in} {facade.lower()}"
     return prompt
 
-def generate_prompt():
-    return generate_doors()
-
 def calculate_median_distance(point_cloud, camera_extrinsics):
     """
     Calculates the median distance from the camera to the points in the point cloud using world coordinates.

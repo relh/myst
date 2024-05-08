@@ -107,12 +107,13 @@ def main(args, meta_idx):
     while True:
         # --- setup initial scene ---
         if image is None: 
-            if args.prompter == 'ai':
-                orig_prompt = prompt = generate_prompt()
-            else:
-                pass
-                #orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             orig_prompt = prompt = 'A photorealistic kitchen.'
+            if args.prompter == 'auto':
+                orig_prompt = prompt = generate_scene()
+            elif args.prompter == 'doors':
+                orig_prompt = prompt = generate_doors()
+            else:
+                orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             print(prompt)
 
             with torch.no_grad():
@@ -130,7 +131,7 @@ def main(args, meta_idx):
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images)
-            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---
             if args.renderer == 'py3d':
@@ -211,7 +212,7 @@ def main(args, meta_idx):
 
             # --- lift img to 3d ---
             pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm)
-            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
         idx += 1
     rr.script_teardown(args)
 
@@ -238,7 +239,7 @@ if __name__ == "__main__":
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--prompter', type=str, default='me', help='me / ai')
+    parser.add_argument('--prompter', type=str, default='auto', help='me / doors / auto')
     parser.add_argument('--sequence', type=str, default='auto', help='doors / auto')
     args = parser.parse_args()
 
@@ -252,4 +253,3 @@ if __name__ == "__main__":
     # OOM after 130 or so
     for meta_idx in range(100):
         main(args, meta_idx+how_far)  
-        break
