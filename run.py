@@ -108,11 +108,11 @@ def main(args, meta_idx):
         # --- setup initial scene ---
         if image is None: 
             if args.prompter == 'ai':
-                #orig_prompt = prompt = generate_prompt()
-                orig_prompt = prompt = 'A photorealistic kitchen.'
+                orig_prompt = prompt = generate_prompt()
             else:
-                #orig_prompt = prompt = 'A photorealistic kitchen.'
-                orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
+                pass
+                #orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
+            orig_prompt = prompt = 'A photorealistic kitchen.'
             print(prompt)
 
             with torch.no_grad():
@@ -129,19 +129,19 @@ def main(args, meta_idx):
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics = img_to_pts_3d(all_images, None, None)
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images)
             #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---
             if args.renderer == 'py3d':
                 cameras = PerspectiveCameras(
-                    device='cuda',
-                    R=torch.eye(3).unsqueeze(0),
+                    #R=torch.eye(3).unsqueeze(0),
+                    #T=torch.zeros(1, 3),
                     in_ndc=False,
-                    T=torch.zeros(1, 3),
-                    focal_length=-intrinsics[0,0].unsqueeze(0),
-                    principal_point=intrinsics[:2,2].unsqueeze(0),
+                    focal_length=((intrinsics[0,0], intrinsics[1,1]),),
+                    principal_point=((intrinsics[0,2], intrinsics[1,2]),),
                     image_size=torch.ones(1, 2) * size,
+                    device='cuda',
                 )
 
         # --- rerun logging --- 
@@ -210,9 +210,8 @@ def main(args, meta_idx):
             all_cam2world.append(torch.linalg.inv(world2cam))
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, world2cam, all_cam2world, _ = img_to_pts_3d(all_images, all_cam2world, intrinsics)
+            pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm)
             #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
-
         idx += 1
     rr.script_teardown(args)
 
@@ -223,7 +222,6 @@ def main(args, meta_idx):
 
         start = Image.fromarray(all_images[0].cpu().numpy())
         end = Image.fromarray(all_images[-1].cpu().numpy())
-
         start.save(f'./outputs/imgs/{meta_idx}_start.png')
         end.save(f'./outputs/imgs/{meta_idx}_end.png')
         pickle.dump(data, open(f'./outputs/pickles/{meta_idx}.pkl', 'wb'))
@@ -254,3 +252,4 @@ if __name__ == "__main__":
     # OOM after 130 or so
     for meta_idx in range(100):
         main(args, meta_idx+how_far)  
+        break
