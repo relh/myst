@@ -10,7 +10,8 @@ from pytorch3d.renderer import (NormWeightedCompositor,
                                 PointsRenderer, PulsarPointsRenderer)
 from pytorch3d.structures import Pointclouds
 
-from misc.camera import pts_world_to_cam
+from misc.camera import pts_world_to_cam, pts_world_to_visible
+
 
 def pts_cam_to_pytorch3d(points_3d):
     points_3d[:, :2] = points_3d[:, :2] * -1
@@ -19,13 +20,21 @@ def pts_cam_to_pytorch3d(points_3d):
 def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras):
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 
+    vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape)
+    vis_3d = points_3d[vis_mask]
+
     points_3d = pts_world_to_cam(points_3d, extrinsics)
     points_3d = pts_cam_to_pytorch3d(points_3d)
     point_cloud = Pointclouds(points=[points_3d], features=[colors.float() / 255.0])
+
+    radius = 1 / ((image_shape[0] * 0.25) * (float(vis_mask.sum()) / image_shape[0] ** 2.0))
+    print(float(vis_mask.sum()))
+    print(image_shape[0] ** 2.0)
+    print(radius)
     
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
-        radius=1.0 / (image_shape[0] * 0.5),
+        radius=radius,
     )
     
     renderer = PointsRenderer(

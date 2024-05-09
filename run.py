@@ -84,7 +84,6 @@ def move_camera(extrinsics, direction, amount):
         extrinsics = torch.matmul(rotation_matrix, extrinsics)
     return extrinsics
 
-
 def main(args, meta_idx):
     # --- setup rerun args ---
     rr.script_setup(args, f"{meta_idx}myst")
@@ -92,7 +91,6 @@ def main(args, meta_idx):
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    amount = 0.05
     if args.sequence == 'auto':
         sequence = generate_control()
     elif args.sequence == 'doors':
@@ -113,7 +111,8 @@ def main(args, meta_idx):
             elif args.prompter == 'doors':
                 orig_prompt = prompt = generate_doors()
             else:
-                orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
+                pass
+                #orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             print(prompt)
 
             mask = torch.ones(size, size, 3)
@@ -129,6 +128,7 @@ def main(args, meta_idx):
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images)
+            amount = median_scene_distance(pts_3d, world2cam) / 10.0
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
             # --- establish camera parameters ---

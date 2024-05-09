@@ -1,13 +1,37 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import math
+import random
+
 import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 import torch
+from pytorch3d.transforms import Transform3d
 
 from misc.camera import project_to_image, pts_cam_to_world, pts_world_to_unique
 
+
+def median_scene_distance(point_cloud, camera_extrinsics):
+    """
+    Calculates the median distance from the camera to the points in the point cloud using world coordinates.
+
+    Args:
+    - point_cloud (torch.Tensor): A tensor of shape (N, 3) containing the coordinates of the points in world coordinates.
+    - camera_extrinsics (torch.Tensor): A 4x4 tensor representing the camera extrinsic matrix that transforms points from world coordinates to camera coordinates.
+
+    Returns:
+    - float: The median distance of the points from the camera.
+    """
+    # Extract camera position from the extrinsics matrix
+    # The camera position is the negative of the translation components of the matrix, transformed by the rotation part.
+    rotation_matrix = camera_extrinsics[:3, :3]
+    translation_vector = camera_extrinsics[:3, 3]
+    camera_position = -torch.matmul(rotation_matrix.transpose(0, 1), translation_vector)
+
+    distances = torch.norm(point_cloud - camera_position, dim=1)
+    return distances.median().item()  # Convert to Python float for general use
 
 def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     """

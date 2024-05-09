@@ -41,6 +41,11 @@ def project_to_image(camera_coords, intrinsics, image_shape):
               (camera_coords[:, 2] > 0.0)
     return torch.stack([x_pixels[visible], y_pixels[visible]], dim=1), visible
 
+def pts_world_to_visible(pts_3d, intrinsics, extrinsics, image_shape):
+    camera_coords = pts_world_to_cam(pts_3d, extrinsics)
+    proj, visible = project_to_image(camera_coords, intrinsics, image_shape)
+    return visible
+
 def pts_world_to_unique(pts_3d, colors, intrinsics, extrinsics, image_shape):
     camera_coords = pts_world_to_cam(pts_3d, extrinsics)
     proj, visible = project_to_image(camera_coords, intrinsics, image_shape)
