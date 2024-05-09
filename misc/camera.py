@@ -93,13 +93,14 @@ def pts_cam_to_pytorch3d(points_3d):
     points_3d[:, :2] = points_3d[:, :2] * -1
     return points_3d
 
-def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras):
+def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale):
+    from misc.scale import median_scene_distance
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 
     # find visible to compute appropriate point radius assuming dense 
     vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape)
-    radius = 1 / (((image_shape[0] * 0.25) * (float(vis_mask.sum()) / image_shape[0] ** 2.0)) + 1e-5)
-    radius = max(radius, 1 / (image_shape[0] * 0.5))
+    this_scale = median_scene_distance(points_3d[vis_mask], extrinsics) 
+    radius = 1 / ((image_shape[0] * 0.5) * (scale / this_scale) + 1e-5)
 
     points_3d = pts_world_to_cam(points_3d, extrinsics)
     points_3d = pts_cam_to_pytorch3d(points_3d)

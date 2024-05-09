@@ -18,12 +18,13 @@ import rerun as rr  # pip install rerun-sdk
 from PIL import Image
 from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 
-from misc.camera import (pts_3d_to_img_py3d, pts_3d_to_img_raster,
-                         pts_cam_to_world, move_camera)
+from misc.camera import (move_camera, pts_3d_to_img_py3d, pts_3d_to_img_raster,
+                         pts_cam_to_world)
 from misc.imutils import fill
 from misc.inpaint import run_inpaint
 from misc.maker import *
 from misc.prune import density_pruning_py3d
+from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
 from misc.three_d import img_to_pts_3d_da, img_to_pts_3d_dust
 
@@ -126,7 +127,7 @@ def main(args, meta_idx):
             inpaint = True
 
         # --- turn 3d points to image ---
-        gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras)
+        gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale)
         mask = gen_image == -255
         #gen_image = fill(gen_image)      # blur points to make a smooth image
 
