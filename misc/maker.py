@@ -59,14 +59,14 @@ def generate_control(control, amount):
 
     if control == 'auto':
         rot = random.choice(['a', 'd'])
-        trans = random.choice(['w', 's'])
+        trans = random.choice(['w', 's', 's', 's'])
 
         rot_num = random.choice([2, 3, 4, 5]) 
 
         if trans == 'w':
             trans_num = random.choice([1, 2, 3])
         else:
-            trans_num = random.choice([2, 3, 4, 5])
+            trans_num = random.choice([2, 3, 4, 5, 6, 7])
 
         sequence = [rot] * rot_num + [trans] * trans_num + ['f']
         return [(x, amount) for x in sequence]
