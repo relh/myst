@@ -6,7 +6,7 @@ import numpy as np
 import PIL
 import torch
 import torch.nn.functional as F
-from diffusers import AutoPipelineForInpainting
+from diffusers import AutoPipelineForInpainting, StableDiffusionInpaintPipeline
 from einops import rearrange, repeat
 from kornia.geometry.transform import get_affine_matrix2d, warp_affine
 from PIL import Image
@@ -18,51 +18,14 @@ from torchvision.transforms.functional import pad
 # Global variable for the pipeline
 pipeline = None
 
-def tensor_to_square_pil(image, mask, zoom=(456.0 / 512.0)):
-    image_tensor = rearrange(image / 255.0, 'h w c -> 1 c h w').to(torch.float32)
-    mask_tensor = rearrange(mask, 'h w -> 1 1 h w').to(torch.float32)
-
-    # Calculate zoom and get affine transformation
-    _, c, h, w = image_tensor.shape
-    center = torch.tensor([w / 2, h / 2]).unsqueeze(0)
-    zoom_tensor = torch.tensor([zoom, zoom]).unsqueeze(0)
-    translate = torch.tensor([0.0, 0.0]).unsqueeze(0)
-    angle = torch.tensor([0.0])
-
-    M = get_affine_matrix2d(center=center, angle=angle, scale=zoom_tensor, translations=translate).to(image_tensor.device)
-
-    # Apply affine transformation to zoom out
-    image_tensor = warp_affine(image_tensor, M[:, :2], dsize=(math.ceil(h / zoom), math.ceil(w / zoom)), padding_mode="border")
-    mask_tensor = F.interpolate(mask_tensor, size=(math.ceil(h / zoom), math.ceil(w / zoom)), mode='nearest')
-
-    # Determine new size to make the image square and calculate padding
-    new_h, new_w = image_tensor.shape[2:]
-    pad_h = (max(new_h, new_w) - new_h) // 2
-    pad_w = (max(new_h, new_w) - new_w) // 2
-
-    # Apply padding to maintain border effect
-    padded_image = pad(image_tensor, [pad_w, pad_h, pad_w, pad_h], padding_mode="edge")
-    padded_mask = pad(mask_tensor, [pad_w, pad_h, pad_w, pad_h], padding_mode="constant", fill=1)
-
-    padded_image = rearrange(padded_image, '1 c h w -> h w c').cpu().numpy()
-    padded_mask = rearrange(padded_mask, '1 1 h w -> h w').cpu().numpy()
-
-    padded_image = (padded_image * 255).astype(np.uint8)
-    padded_mask = (padded_mask * 255).astype(np.uint8)
-
-    output_image = Image.fromarray(padded_image)
-    output_mask = Image.fromarray(padded_mask, 'L')  # 'L' mode for grayscale mask
-
-    return output_image, output_mask, pad_h, pad_w
-
-
 def initialize_pipeline():
     global pipeline
 
-    pipeline = AutoPipelineForInpainting.from_pretrained(
+    #pipeline = AutoPipelineForInpainting.from_pretrained(
+    pipeline = StableDiffusionInpaintPipeline.from_pretrained(
         #"runwayml/stable-diffusion-inpainting", 
         "stabilityai/stable-diffusion-2-inpainting",
-        torch_dtype=torch.float16, variant="fp16"
+        torch_dtype=torch.float16#, variant="fp16"
     ).to("cuda")
     pipeline.initial_strength = 1.0
     pipeline.next_strength = 1.0
@@ -78,37 +41,25 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     if pipeline is None:
         initialize_pipeline()
         strength = pipeline.initial_strength
-        seed = 78631 
+        #seed = 78631 
     else:
         strength = pipeline.next_strength 
     seed = random.randint(0, 99999)
     print(f'seed is.. {seed}')
     generator = torch.Generator(device="cuda").manual_seed(seed)
-    image, mask_image, pad_h, pad_w = tensor_to_square_pil(image, mask_image, zoom=1.0)
-    #mask_image = pipeline.mask_processor.blur(mask_image, blur_factor=33)
+
+    pipe_image = Image.fromarray((image.cpu().numpy()).astype(np.uint8))
+    pipe_mask = Image.fromarray(((mask_image * 255.0).cpu().numpy()).astype(np.uint8), 'L')
 
     output = pipeline(
       prompt=prompt,
-      negative_prompt=
-        'blurry, low-resolution, pixelated, distorted, fuzzy, smeared, muddled, people, \
-        unclear, poorly lit, undefined, flat, artifacts, compression artifacts, low fidelity',
-      image=image,
-      mask_image=mask_image,
-      guidance_scale=4.0,
-      num_inference_steps=50,  # steps between 15 and 30 work well for us
-      strength=strength,  # make sure to use `strength` below 1.0
+      image=pipe_image,
+      mask_image=pipe_mask,
+      strength=strength,  
       generator=generator,
     )
 
-    output = repeat(torch.tensor(np.array(output.images[0])).float().to('cuda'), 'h w c -> 1 c h w')
-    output = F.interpolate(output, size=(512, 512), mode='nearest')
-    output = output[:, :, pad_h:(None if pad_h == 0 else -pad_h), pad_w:(None if pad_w == 0 else -pad_w)]
-
-    if pad_h > 0 and pad_w > 0:
-        to_unpad_h = int((512 - 456) / 2)
-        to_unpad_w = int((288 - 256) / 2)
-        output = output[:, :, to_unpad_w:-to_unpad_w, to_unpad_h:-to_unpad_h]
-    return rearrange(output, '1 c h w -> h w c')
+    return torch.tensor(np.array(output.images[0])).float().to('cuda')
 
 # You might want to initialize the pipeline when the script is imported
 # But it can also be lazily initialized on the first call to run_inpainting_pipeline

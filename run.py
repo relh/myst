@@ -216,7 +216,7 @@ def main(args, meta_idx):
         idx += 1
     rr.script_teardown(args)
 
-    if args.prompter == 'ai':
+    if args.prompter != 'me':
         data = {'meta_idx': meta_idx,\
                 'prompt': orig_prompt,\
                 'sequence': sequence}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
@@ -253,3 +253,4 @@ if __name__ == "__main__":
     # OOM after 130 or so
     for meta_idx in range(100):
         main(args, meta_idx+how_far)  
+        breakpoint()
