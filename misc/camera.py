@@ -98,7 +98,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
 
     # find visible to compute appropriate point radius assuming dense 
     vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape)
-    radius = 1 / ((image_shape[0] * 0.25) * (float(vis_mask.sum()) / image_shape[0] ** 2.0))
+    radius = 1 / (((image_shape[0] * 0.25) * (float(vis_mask.sum()) / image_shape[0] ** 2.0)) + 1e-5)
     #radius = 1 / (image_shape[0] * 0.5)
 
     points_3d = pts_world_to_cam(points_3d, extrinsics)
