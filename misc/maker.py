@@ -61,7 +61,7 @@ def generate_control(control, amount):
         rot = random.choice(['a', 'd'])
         trans = random.choice(['w', 's'])
 
-        rot_num = random.choice([2, 3, 4, 5, 6, 7]) 
+        rot_num = random.choice([2, 3, 4, 5]) 
 
         if trans == 'w':
             trans_num = random.choice([1, 2, 3])
