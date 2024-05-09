@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-
 import sys
 
 import numpy as np
@@ -10,9 +9,8 @@ import rerun as rr  # pip install rerun-sdk
 import torch
 from pytorch3d.renderer import (NormWeightedCompositor,
                                 PointsRasterizationSettings, PointsRasterizer,
-                                PointsRenderer)
+                                PointsRenderer, PulsarPointsRenderer)
 from pytorch3d.structures import Pointclouds
-
 
 def pts_world_to_cam(pts_3d, extrinsics):
     pts_homo = torch.cat((pts_3d, torch.ones(pts_3d.shape[0], 1, device=pts_3d.device)), dim=1).T
@@ -89,3 +87,32 @@ def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape,
     image_t[proj_da[:, 1], proj_da[:, 0]] = (vis_depth_colors * 1.0).to(torch.uint8)
 
     return image_t.clone().float()
+
+def pts_cam_to_pytorch3d(points_3d):
+    points_3d[:, :2] = points_3d[:, :2] * -1
+    return points_3d
+
+def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras):
+    image_shape = (int(image_shape[0]), int(image_shape[1]))
+
+    # find visible to compute appropriate point radius assuming dense 
+    vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape)
+    radius = 1 / ((image_shape[0] * 0.25) * (float(vis_mask.sum()) / image_shape[0] ** 2.0))
+    #radius = 1 / (image_shape[0] * 0.5)
+
+    points_3d = pts_world_to_cam(points_3d, extrinsics)
+    points_3d = pts_cam_to_pytorch3d(points_3d)
+    point_cloud = Pointclouds(points=[points_3d], features=[colors.float() / 255.0])
+    
+    raster_settings = PointsRasterizationSettings(
+        image_size=image_shape[:2], 
+        radius=radius,
+    )
+    
+    renderer = PointsRenderer(
+        rasterizer=PointsRasterizer(cameras=cameras, raster_settings=raster_settings),
+        compositor=NormWeightedCompositor(background_color=[-1.0, -1.0, -1.0])
+    )
+    
+    image = renderer(point_cloud)[0, ..., :3] * 255.0
+    return image

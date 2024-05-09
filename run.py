@@ -19,14 +19,13 @@ from PIL import Image
 from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 
 from misc.maker import *
-from misc.camera import pts_3d_to_img_raster, pts_cam_to_world
+from misc.camera import pts_3d_to_img_raster, pts_cam_to_world, pts_3d_to_img_py3d
 from misc.da_3d import img_to_pts_3d_da
 from misc.dust_3d import img_to_pts_3d_dust
 from misc.imutils import fill
 from misc.inpaint import run_inpaint
 from misc.merge import merge_and_filter
 from misc.prune import density_pruning_py3d
-from misc.renderer import pts_3d_to_img_py3d
 from misc.scale import project_and_scale_points
 from misc.supersample import run_supersample, supersample_point_cloud
 from misc.write import write_inference_html
