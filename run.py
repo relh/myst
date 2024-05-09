@@ -104,14 +104,14 @@ def main(args, meta_idx):
     while True:
         # --- setup initial scene ---
         if image is None: 
-            orig_prompt = prompt = 'A photorealistic kitchen.'
             if args.prompter == 'auto':
                 orig_prompt = prompt = generate_scene()
             elif args.prompter == 'doors':
                 orig_prompt = prompt = generate_doors()
+            elif args.prompter == 'me':
+                orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             else:
-                pass
-                #orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
+                orig_prompt = prompt = 'A high-resolution image of a kitchen.'
             print(prompt)
 
             mask = torch.ones(size, size, 3)
@@ -235,7 +235,7 @@ if __name__ == "__main__":
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--prompter', type=str, default='auto', help='me / doors / auto')
+    parser.add_argument('--prompter', type=str, default='auto', help='me / doors / auto / default')
     parser.add_argument('--sequence', type=str, default='auto', help='doors / auto')
     args = parser.parse_args()
 
