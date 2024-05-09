@@ -116,17 +116,15 @@ def main(args, meta_idx):
                 orig_prompt = prompt = input(f"enter stable diffusion initial scene: ")
             print(prompt)
 
+            mask = torch.ones(size, size, 3)
             with torch.no_grad():
-                image = run_inpaint(torch.zeros(size, size, 3),\
-                                    torch.ones(size, size),\
+                image = run_inpaint(torch.zeros(size, size, 3), mask,\
                                     prompt=prompt).to(torch.uint8)
-            mask = torch.ones(size, size)
             #with torch.no_grad():
             #    image = run_supersample(image, mask, prompt)
             all_images = [image.detach()]
         else:
             image = gen_image.to(torch.uint8)
-            image[image.sum(dim=2) < 10] = 0.0
 
         # --- estimate depth ---
         if pts_3d is None: 
@@ -136,8 +134,6 @@ def main(args, meta_idx):
             # --- establish camera parameters ---
             if args.renderer == 'py3d':
                 cameras = PerspectiveCameras(
-                    #R=torch.eye(3).unsqueeze(0),
-                    #T=torch.zeros(1, 3),
                     in_ndc=False,
                     focal_length=((intrinsics[0,0], intrinsics[1,1]),),
                     principal_point=((intrinsics[0,2], intrinsics[1,2]),),
@@ -156,7 +152,7 @@ def main(args, meta_idx):
         rr.log("world/camera/image", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/image", rr.Image(see(image)).compress(jpeg_quality=75))
         rr.log("world/camera/mask", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
-        rr.log("world/camera/mask", rr.Image((torch.stack([mask, mask, mask], dim=2).float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
+        rr.log("world/camera/mask", rr.Image((mask.float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
 
         # --- get user input ---
         inpaint = False
@@ -194,11 +190,12 @@ def main(args, meta_idx):
 
         # --- turn 3d points to image ---
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras)
-        gen_image = fill(gen_image)      # blur points to make a smooth image
+        mask = gen_image == -255
+        #gen_image = fill(gen_image)      # blur points to make a smooth image
 
         if inpaint: 
             # --- inpaint pipeline ---
-            mask = gen_image.sum(dim=2) < 10
+            #mask = gen_image.sum(dim=2) < 10
             gen_image[mask] = -1.0
             with torch.no_grad():
                 gen_image[mask] = run_inpaint(gen_image, mask.float(), prompt=prompt)[mask]

@@ -25,12 +25,13 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
-        radius=1.0 / image_shape[0] * 1.0,
+        radius=1.0 / (image_shape[0] * 0.5),
     )
     
     renderer = PointsRenderer(
         rasterizer=PointsRasterizer(cameras=cameras, raster_settings=raster_settings),
-        compositor=NormWeightedCompositor(background_color=[0.0, 0.0, 0.0])
+        compositor=NormWeightedCompositor(background_color=[-1.0, -1.0, -1.0])
     )
     
-    return renderer(point_cloud)[0, ..., :3] * 255.0
+    image = renderer(point_cloud)[0, ..., :3] * 255.0
+    return image

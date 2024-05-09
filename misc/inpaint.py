@@ -49,7 +49,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     generator = torch.Generator(device="cuda").manual_seed(seed)
 
     pipe_image = Image.fromarray((image.cpu().numpy()).astype(np.uint8))
-    pipe_mask = Image.fromarray(((mask_image * 255.0).cpu().numpy()).astype(np.uint8), 'L')
+    pipe_mask = Image.fromarray(((mask_image.sum(dim=2) / 3.0 * 255.0).cpu().numpy()).astype(np.uint8), 'L')
 
     output = pipeline(
       prompt=prompt,
