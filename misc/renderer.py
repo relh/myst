@@ -27,10 +27,8 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     points_3d = pts_cam_to_pytorch3d(points_3d)
     point_cloud = Pointclouds(points=[points_3d], features=[colors.float() / 255.0])
 
+    #radius = 1 / (image_shape[0] * 0.5)
     radius = 1 / ((image_shape[0] * 0.25) * (float(vis_mask.sum()) / image_shape[0] ** 2.0))
-    print(float(vis_mask.sum()))
-    print(image_shape[0] ** 2.0)
-    print(radius)
     
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
