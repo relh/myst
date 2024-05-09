@@ -12,6 +12,7 @@ from pytorch3d.renderer import (NormWeightedCompositor,
                                 PointsRenderer, PulsarPointsRenderer)
 from pytorch3d.structures import Pointclouds
 
+
 def pts_world_to_cam(pts_3d, extrinsics):
     pts_homo = torch.cat((pts_3d, torch.ones(pts_3d.shape[0], 1, device=pts_3d.device)), dim=1).T
     pts_cam = extrinsics @ pts_homo 
@@ -116,3 +117,44 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     
     image = renderer(point_cloud)[0, ..., :3] * 255.0
     return image
+
+def move_camera(extrinsics, direction, amount):
+    """
+    Move the camera considering its orientation or rotate left/right.
+    
+    :param extrinsics: The current extrinsics matrix.
+    :param direction: 'w' (forward), 's' (backward), 'a' (left rotate), 'd' (right rotate).
+    :param amount: The amount to move or rotate.
+    """
+    # Extract rotation matrix R and translation vector t from the extrinsics matrix
+    R = extrinsics[:3, :3]
+    
+    if direction in ['w', 's']:
+        # Direction vector for forward/backward 
+        amount = (-amount if direction == 'w' else amount)
+        extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
+    elif direction in ['q', 'e']:
+        # Rotation angle (in radians). Positive for 'e' (down), negative for 'q' (up)
+        angle = torch.tensor(-amount if direction == 'e' else amount)
+        # Rotation matrix around the X-axis (assuming X is forward/backward)
+        rotation_matrix = torch.tensor([
+            [1, 0, 0, 0],
+            [0, torch.cos(angle), -torch.sin(angle), 0],
+            [0, torch.sin(angle), torch.cos(angle), 0],
+            [0, 0, 0, 1]
+        ], device=extrinsics.device)
+        # Apply rotation to the extrinsics matrix
+        extrinsics = torch.matmul(rotation_matrix, extrinsics)
+    elif direction in ['a', 'd']:
+        # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
+        angle = torch.tensor(-amount if direction == 'd' else amount)
+        # Rotation matrix around the Y-axis (assuming Y is up)
+        rotation_matrix = torch.tensor([
+            [torch.cos(angle), 0, torch.sin(angle), 0],
+            [0, 1, 0, 0],
+            [-torch.sin(angle), 0, torch.cos(angle), 0],
+            [0, 0, 0, 1]
+        ], device=extrinsics.device)
+        # Apply rotation to the extrinsics matrix
+        extrinsics = torch.matmul(rotation_matrix, extrinsics)
+    return extrinsics

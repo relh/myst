@@ -55,8 +55,6 @@ a horde
 an airship                                                                                                                                                                                                                                                                                                                                      
 gables                                                                                                                                                                  
 an astronomer                                                                                            
-an AI generated image                                                                                    
-the Best Dall-E mini prompt                                                                              
 a Banksy webcomic                                                                                        
 an eye                                                                                                   
 a hand                                                                                                   
@@ -93,103 +91,103 @@ shadows
 figures                                                                                                                                     
 deities                                                                                                                                     
 rocks
-sprawling metropolis
-futuristic colony
-abandoned space station
-haunted castle
-tranquil zen garden
-bustling marketplace
-cyberpunk alley
-enchanted forest
-majestic palace
-ancient temple
-underwater city
-secret laboratory
-war-torn battlefield
-post-apocalyptic wasteland
-serene monastery
-mystical shrine
-vibrant carnival
-dilapidated mansion
-sprawling vineyard
-busy construction site
-old western town
-high-tech command center
-pirate cove
-neon-lit arcade
-imperial fortress
-clandestine meeting spot
-rebel hideout
-colonial outpost
-spaceport docks
-deep sea research facility
-luxurious cruise ship
-snowy mountain village
-desert oasis
-tribal village
-quantum computer room
-vintage film studio
-revolutionary rally
-cybernetic workshop
-ghost town
-extraterrestrial landscape
-mythical mountain peak
-secret society chamber
-underwater research base
-heroic guild hall
-dystopian megacity
-smuggler’s den
-witch’s cabin
-wizard’s tower
-alien bazaar
-interdimensional portal
-Antique grandfather clock
-Ornate vase with fresh flowers
-Modern sculptural art piece
-Vintage typewriter
-Decorative globe on a stand
-Luxurious armchair
-Classic jukebox
-Large potted fern
-Ornamental fountain
-Elegant candelabra
-Sleek espresso machine
-Grand piano
-Intricate chess set
-Designer table lamp
-Handcrafted wooden rocking chair
-Retro television set
-Large aquarium with tropical fish
-Contemporary wine rack
-Elaborate model ship
-Decorative fireplace screen
-Stylish mannequin dressed in boutique clothing
-Classic arcade game machine
-Professional camera on a tripod
-Decorative stained glass panel
-Sleek bicycle on a display stand
-High-end sound system with speakers
-Sophisticated bar cart
-Vintage sewing machine
-Interactive digital kiosk
-Exotic bird in a large cage
-Minimalist water sculpture
-Rustic pottery wheel
-Large wall clock with intricate details
-Vintage cash register
-Artistic light installation
-Decorative suit of armor
-Luxurious pet bed
-Classic microphone on a stand
-Elegant tea cart
-Modern fireplace with bioethanol burner
-Stylish coat stand
-Designer sneaker display
-Elaborate magic trick setup
-Professional massage table
-Large bonsai tree
-Gourmet food cart
-Interactive science exhibit
-High-tech 3D printer
-Detailed dollhouse
-Carved stone bust
+a sprawling metropolis
+a futuristic colony
+an abandoned space station
+a haunted castle
+a tranquil zen garden
+a bustling marketplace
+a cyberpunk alley
+an enchanted forest
+a majestic palace
+an ancient temple
+an underwater city
+a secret laboratory
+a war-torn battlefield
+a post-apocalyptic wasteland
+a serene monastery
+a mystical shrine
+a vibrant carnival
+a dilapidated mansion
+a sprawling vineyard
+a busy construction site
+an old western town
+a high-tech command center
+a pirate cove
+a neon-lit arcade
+an imperial fortress
+a clandestine meeting spot
+a rebel hideout
+a colonial outpost
+a spaceport docks
+a deep sea research facility
+a luxurious cruise ship
+a snowy mountain village
+a desert oasis
+a tribal village
+a quantum computer room
+a vintage film studio
+a revolutionary rally
+a cybernetic workshop
+a ghost town
+an extraterrestrial landscape
+a mythical mountain peak
+a secret society chamber
+a underwater research base
+a heroic guild hall
+a dystopian megacity
+a smuggler’s den
+a witch’s cabin
+a wizard’s tower
+an alien bazaar
+an interdimensional portal
+an antique grandfather clock
+an ornate vase with fresh flowers
+a modern sculptural art piece
+a vintage typewriter
+a decorative globe on a stand
+a luxurious armchair
+a classic jukebox
+a large potted fern
+an ornamental fountain
+an elegant candelabra
+a sleek espresso machine
+a grand piano
+an intricate chess set
+a designer table lamp
+a handcrafted wooden rocking chair
+a retro television set
+a large aquarium with tropical fish
+a contemporary wine rack
+an elaborate model ship
+a decorative fireplace screen
+a stylish mannequin dressed in boutique clothing
+a classic arcade game machine
+a professional camera on a tripod
+a decorative stained glass panel
+a sleek bicycle on a display stand
+a high-end sound system with speakers
+a sophisticated bar cart
+a vintage sewing machine
+an interactive digital kiosk
+an exotic bird in a large cage
+a minimalist water sculpture
+a rustic pottery wheel
+a large wall clock with intricate details
+a vintage cash register
+an artistic light installation
+a decorative suit of armor
+a luxurious pet bed
+a classic microphone on a stand
+an elegant tea cart
+a modern fireplace with bioethanol burner
+a stylish coat stand
+a designer sneaker display
+an elaborate magic trick setup
+a professional massage table
+a large bonsai tree
+a gourmet food cart
+an interactive science exhibit
+a high-tech 3D printer
+a detailed dollhouse
+a carved stone bust

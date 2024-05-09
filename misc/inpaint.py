@@ -57,7 +57,7 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
       mask_image=pipe_mask,
       strength=strength,  
       generator=generator,
-      guidance_scale=10.0,
+      guidance_scale=7.0,
       num_inference_steps=50,  # steps between 15 and 30 work well for us
     )
 

@@ -1,27 +1,33 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import sys
+
+sys.path.append('depth_anything/metric_depth/')
+sys.path.append('dust3r/')
+
 import argparse
 import copy
 import functools
 import math
 import os
-import sys
 import tempfile
 
 import gradio
 import matplotlib.pyplot as pl
 import numpy as np
 import PIL.Image
+import rerun as rr  # pip install rerun-sdk
 import torch
+import torchvision.transforms as transforms
 import torchvision.transforms as tvf
 import trimesh
 from PIL import Image
 from PIL.ImageOps import exif_transpose
 from scipy.spatial.transform import Rotation
 
-sys.path.append('dust3r/')
-
+from depth_anything.metric_depth.zoedepth.models.builder import build_model
+from depth_anything.metric_depth.zoedepth.utils.config import get_config
 from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 from dust3r.image_pairs import make_pairs
 from dust3r.inference import inference
@@ -32,6 +38,7 @@ from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
 from misc.supersample import supersample_point_cloud
 
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+da_model = None
 dust_model = None
 
 def _resize_pil_image(img, long_edge_size):
@@ -150,7 +157,48 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
            all_cam2world,\
            intrinsics,\
            depth_maps
-            
 
+def img_to_pts_3d_da(color_image, views=None):
+    global da_model
+    if da_model is None:
+        config = get_config('zoedepth', "eval", 'nyu')
+        config.pretrained_resource = 'local::./checkpoints/depth_anything_metric_depth_indoor.pt'
+        da_model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
+        da_model.eval()
+    original_width, original_height = 512, 512
+    #color_image = Image.open(image_path).convert('RGB')
+    color_image = color_image[0]
+    #original_width, original_height = color_image.size()
+    color_image = Image.fromarray(color_image.cpu().numpy())
+    image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
 
+    pred = da_model(image_tensor, dataset='nyu')
+    if isinstance(pred, dict):
+        pred = pred.get('metric_depth', pred.get('out'))
+    elif isinstance(pred, (list, tuple)):
+        pred = pred[-1]
+    pred = pred.squeeze().detach().cpu().numpy()
 
+    # Resize color image and depth to final size
+    resized_color_image = color_image.resize((original_width, original_height), Image.LANCZOS)
+    resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
+
+    focal_length_x, focal_length_y = (256.0, 256.0)
+    x, y = np.meshgrid(np.arange(original_width), np.arange(original_height))
+    x = (x - original_width / 2.0) / focal_length_x
+    y = (y - original_height / 2.0) / focal_length_y
+    z = np.array(resized_pred)
+
+    # Compute 3D points in camera coordinates
+    points_camera_coord = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3) * 50.0
+    points_camera_coord_tensor = torch.tensor(points_camera_coord, dtype=torch.float32, device='cuda')
+
+    colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
+    colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
+    return points_camera_coord_tensor, colors, None
+
+if __name__ == '__main__':
+    image_path = "./depth_anything/metric_depth/my_test/input/demo11.png"
+    color_image = Image.open(image_path).convert('RGB')
+    pcd = image_to_3d(color_image)
+    breakpoint()
