@@ -170,7 +170,7 @@ def main(args, meta_idx):
             user_input, amount = sequence[idx]
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             world2cam = move_camera(world2cam, user_input.lower(), amount)  # Assuming an amount of 0.1 for movement/rotation
-            print(f"{user_input} --> camera moved/rotated, extrinsics:\n", world2cam)
+            print(f"{user_input} --> camera moved/rotated, extrinsics.") #, world2cam)
         elif user_input.lower() == 'f':
             print(f"{user_input} --> fill...")
             inpaint = True

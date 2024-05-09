@@ -7,7 +7,7 @@ import rerun as rr  # pip install rerun-sdk
 import torch
 from pytorch3d.renderer import (NormWeightedCompositor,
                                 PointsRasterizationSettings, PointsRasterizer,
-                                PointsRenderer)
+                                PointsRenderer, PulsarPointsRenderer)
 from pytorch3d.structures import Pointclouds
 
 from misc.camera import pts_world_to_cam
@@ -25,8 +25,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
-        radius=1.0 / image_shape[0] * 2.0,
-        points_per_pixel=2
+        radius=1.0 / image_shape[0] * 1.0,
     )
     
     renderer = PointsRenderer(

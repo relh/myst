@@ -37,15 +37,6 @@ def density_pruning_py3d(points, colors, nb_neighbors=9, std_ratio=2.5):
 
     return pruned_points, pruned_colors
 
-
-def density_pruning(points, colors):
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points.cpu().numpy())
-    #pcd.colors = o3d.utility.Vector3dVector(colors.cpu().numpy())
-    _, ind = pcd.remove_statistical_outlier(nb_neighbors=10, std_ratio=2.0)
-    return points[ind], colors[ind]
-
-
 def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, num_pixels=10):
     H, W = 512, 512
 
