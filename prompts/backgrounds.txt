@@ -150,3 +150,203 @@ Wizard’s tower with a view of the aurora borealis
 Neon-lit dance club with futuristic tech
 Top-secret government facility with alien technology
 Majestic opera house with a ghostly presence
+New York City
+Paris
+Tokyo
+London
+Dubai
+Sydney
+Rome
+Shanghai
+Moscow
+Los Angeles
+Mumbai
+Bangkok
+Istanbul
+Rio de Janeiro
+Seoul
+Singapore
+Cape Town
+Toronto
+Barcelona
+Berlin
+Chicago
+Mexico City
+Hong Kong
+Amsterdam
+San Francisco
+Buenos Aires
+Kuala Lumpur
+Cairo
+Madrid
+Las Vegas
+Milan
+Vienna
+Prague
+Lima
+Jakarta
+Athens
+New Delhi
+Stockholm
+Lisbon
+Johannesburg
+Zurich
+Taipei
+Warsaw
+Budapest
+Havana
+Seattle
+Beirut
+Copenhagen
+Auckland
+Santiago
+Boston
+Dublin
+Brisbane
+Caracas
+Manila
+Montreal
+Venice
+Oslo
+Doha
+Bengaluru
+Florence
+Antwerp
+Perth
+Marseille
+Cologne
+Edinburgh
+Sao Paulo
+St. Petersburg
+Helsinki
+Lagos
+Philadelphia
+Bruges
+Kyoto
+Vancouver
+Belgrade
+Panama City
+Wellington
+Accra
+Algiers
+Christchurch
+Ho Chi Minh City
+San Diego
+Reykjavik
+Lyon
+Salzburg
+Port Louis
+Thimphu
+Tallinn
+Valletta
+Muscat
+Vilnius
+Riyadh
+Ljubljana
+Nairobi
+Dakar
+Abu Dhabi
+Oslo
+Canberra
+Harare
+Quito
+Eiffel Tower, Paris
+Great Wall of China, China
+Machu Picchu, Peru
+Statue of Liberty, New York
+Taj Mahal, India
+Grand Canyon, Arizona
+Pyramids of Giza, Egypt
+Acropolis of Athens, Greece
+Sydney Opera House, Australia
+Mount Fuji, Japan
+Stonehenge, United Kingdom
+Angkor Wat, Cambodia
+Sagrada Familia, Barcelona
+Golden Gate Bridge, San Francisco
+Niagara Falls, Canada/USA
+Christ the Redeemer, Rio de Janeiro
+Colosseum, Rome
+Petra, Jordan
+Chichen Itza, Mexico
+The Louvre, Paris
+Buckingham Palace, London
+Victoria Falls, Zambia/Zimbabwe
+Mount Everest, Nepal/Tibet
+Burj Khalifa, Dubai
+The Vatican, Vatican City
+Hollywood Sign, Los Angeles
+Tower of London, United Kingdom
+Great Barrier Reef, Australia
+Kremlin, Russia
+Alhambra, Spain
+Aya Sofya, Istanbul
+Forbidden City, Beijing
+Edinburgh Castle, United Kingdom
+The Shard, London
+Uluru, Australia
+Palace of Versailles, France
+Yosemite National Park, USA
+The Matterhorn, Switzerland
+Banff National Park, Canada
+Timbuktu, Mali
+The Dead Sea, Jordan/Israel
+Pompeii, Italy
+Machu Picchu, Peru
+Santorini, Greece
+Neuschwanstein Castle, Germany
+Galápagos Islands, Ecuador
+Potala Palace, Tibet
+Mecca, Saudi Arabia
+Glacier National Park, USA
+Uffizi Gallery, Florence
+Mont Saint Michel, France
+Brandenburg Gate, Germany
+Kruger National Park, South Africa
+Iguazu Falls, Argentina/Brazil
+Easter Island, Chile
+Serengeti National Park, Tanzania
+Petra, Jordan
+Palace of Parliament, Bucharest
+The Blue Mosque, Istanbul
+Table Mountain, South Africa
+Ngorongoro Crater, Tanzania
+Rialto Bridge, Venice
+Teotihuacan, Mexico
+Sistine Chapel, Vatican City
+Plitvice Lakes National Park, Croatia
+Ha Long Bay, Vietnam
+St. Peter's Basilica, Vatican City
+Hermitage Museum, St. Petersburg
+Westminster Abbey, London
+Las Vegas Strip, USA
+Great Sphinx, Giza
+Bagan, Myanmar
+Dubai Mall, UAE
+St. Basil's Cathedral, Moscow
+The White House, Washington D.C.
+Lake Louise, Canada
+Arc de Triomphe, Paris
+The Capitol, Washington D.C.
+Joshua Tree National Park, USA
+Kiyomizu-dera, Kyoto
+The Pyramids of Giza, Egypt
+The Met, New York City
+The Berlin Wall, Berlin
+Alcatraz Island, San Francisco
+CN Tower, Toronto
+Yosemite Valley, USA
+The Royal Palace, Madrid
+Ayers Rock, Australia
+The Forbidden City, Beijing
+Bryce Canyon National Park, USA
+The Maldives
+The Zocalo, Mexico City
+Red Square, Moscow
+Angkor Wat, Cambodia
+The Cotswolds, United Kingdom
+Mount Kilimanjaro, Tanzania
+Buckingham Palace, London
+The Sahara Desert, North Africa
+The Amazon Rainforest
+Antelope Canyon, USA

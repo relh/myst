@@ -16,7 +16,7 @@ def read_file(file_path):
 
 # arrangement 
 cameras = read_file('./prompts/camera.txt')
-viewpoints = read_file('./prompts/viewpoint.txt')
+vantages = read_file('./prompts/vantages.txt')
 lead_ins = read_file('./prompts/leaders.txt')
 arrangements = read_file('./prompts/arrangement.txt')
 objects = read_file('./prompts/objects.txt')
@@ -47,11 +47,11 @@ def generate_prompt(prompt):
         return f"{lead_in} a {scene.lower()}"
     elif prompt == 'combo':
         camera = random.choice(cameras + ['']*20)
-        viewpoint = random.choice(viewpoints + ['']*20)
+        vantage = random.choice(vantages + ['']*20)
         arrangement = random.choice(arrangements)
         foreground = random.choice(objects)
         background = random.choice(backgrounds + outdoors + indoors)
-        return f"A {camera}photograph {viewpoint}at {foreground[:-1]} {arrangement[:-1]} {background.lower()[:-1]}"
+        return f"A {camera}photograph {vantage}at {foreground[:-1]} {arrangement[:-1]} {background.lower()[:-1]}"
 
 def generate_control(control, amount):
     # choose from moving and new prompts 

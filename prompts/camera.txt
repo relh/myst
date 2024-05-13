@@ -5,3 +5,5 @@ vivid
 detailed
 stunning
 high-quality
+aerial
+satellite
