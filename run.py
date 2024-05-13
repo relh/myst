@@ -63,15 +63,15 @@ def main(args, meta_idx):
             scale = median_scene_distance(pts_3d, world2cam) / 10.0
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
-            # --- establish camera parameters ---
-            if args.renderer == 'py3d':
-                cameras = PerspectiveCameras(
-                    in_ndc=False,
-                    focal_length=((intrinsics[0,0], intrinsics[1,1]),),
-                    principal_point=((intrinsics[0,2], intrinsics[1,2]),),
-                    image_size=torch.ones(1, 2) * size,
-                    device='cuda',
-                )
+        # --- establish camera parameters ---
+        if args.renderer == 'py3d':
+            cameras = PerspectiveCameras(
+                in_ndc=False,
+                focal_length=((intrinsics[0,0], intrinsics[1,1]),),
+                principal_point=((intrinsics[0,2], intrinsics[1,2]),),
+                image_size=torch.ones(1, 2) * size,
+                device='cuda',
+            )
 
         # --- rerun logging --- 
         see = lambda x: x.detach().cpu().numpy()
@@ -127,7 +127,8 @@ def main(args, meta_idx):
             all_cam2world.append(torch.linalg.inv(world2cam))
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, world2cam, all_cam2world, _, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm)
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm)
+            scale = median_scene_distance(pts_3d, world2cam) / 10.0
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
         idx += 1
     rr.script_teardown(args)
