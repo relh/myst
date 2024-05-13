@@ -22,22 +22,13 @@ from misc.camera import (move_camera, pts_3d_to_img_py3d, pts_3d_to_img_raster,
                          pts_cam_to_world)
 from misc.imutils import fill
 from misc.inpaint import run_inpaint
-from misc.maker import *
+from misc.control import generate_control 
+from misc.text import generate_prompt
 from misc.prune import density_pruning_py3d
 from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
 from misc.three_d import img_to_pts_3d_da, img_to_pts_3d_dust
 
-
-def get_keypress():
-    fd = sys.stdin.fileno()
-    original_attributes = termios.tcgetattr(fd)
-    try:
-        tty.setraw(sys.stdin.fileno())
-        key = sys.stdin.read(1)  # Read a single character
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, original_attributes)
-    return key
 
 def main(args, meta_idx):
     # --- setup rerun args ---
@@ -46,7 +37,6 @@ def main(args, meta_idx):
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    sequence = None
     cameras = None
     pts_3d = None
     image = None
@@ -98,14 +88,7 @@ def main(args, meta_idx):
         # --- get user input ---
         inpaint = False
         print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
-        if args.prompt == 'me':
-            user_input = get_keypress()
-        else:
-            if sequence is None:
-                sequence = generate_control(args.control, scale)
-                print(f'ai sequence is... {sequence}')
-            if idx >= len(sequence): break
-            user_input, scale = sequence[idx]
+        user_input, scale = generate_control(args.control, scale, idx)
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             world2cam = move_camera(world2cam, user_input.lower(), scale)  # Assuming an amount of 0.1 for movement/rotation
             print(f"{user_input} --> camera moved/rotated, extrinsics.") #, world2cam)
@@ -172,8 +155,8 @@ if __name__ == "__main__":
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
-    parser.add_argument('--prompt', type=str, default='combo', help='me / combo / auto / doors / default')
-    parser.add_argument('--control', type=str, default='auto', help='doors / auto')
+    parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
+    parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')
     args = parser.parse_args()
 
     #with torch.autocast(device_type="cuda"):
