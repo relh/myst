@@ -77,7 +77,7 @@ def generate_control(control, amount, idx):
         print(f'ai sequence is... {sequence}')
 
     if control == 'me':
-        return get_keypress(), None
+        return get_keypress(), amount 
     else:
         if idx >= len(sequence): return 'k', None
         user_input, scale = sequence[idx]

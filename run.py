@@ -132,7 +132,7 @@ def main(args, meta_idx):
         idx += 1
     rr.script_teardown(args)
 
-    if args.prompt != 'me':
+    if args.control != 'me':
         data = {'meta_idx': meta_idx,\
                 'prompt': orig_prompt,\
                 'sequence': sequence}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
