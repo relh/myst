@@ -71,19 +71,27 @@ def pts_cam_to_proj(pts_cam, intrinsics):
     proj_pts = (intrinsics @ pts_cam.T)
     return (proj_pts[:2] / proj_pts[2]).T
 
-def project_to_image(camera_coords, intrinsics, image_shape):
+def project_to_image(camera_coords, intrinsics, image_shape, bbox=None):
     # Projects 3D points onto a 2D image plane using the camera's extrinsic and intrinsic matrices.
     im_proj_pts = pts_cam_to_proj(camera_coords, intrinsics)
     im_proj_pts = torch.round(im_proj_pts).long()
     x_pixels, y_pixels = im_proj_pts[:, 0], im_proj_pts[:, 1]
+
     visible = (x_pixels >= 0) & (x_pixels < image_shape[1]) &\
               (y_pixels >= 0) & (y_pixels < image_shape[0]) &\
               (camera_coords[:, 2] > 0.0)
+
+    if bbox[0] is not None:
+        tl, br = bbox
+        not_box = ~((x_pixels >= tl[0]) & (x_pixels < br[0]) &\
+                    (y_pixels >= tl[1]) & (y_pixels < br[1]))
+        visible = visible & not_box
+
     return torch.stack([x_pixels[visible], y_pixels[visible]], dim=1), visible
 
-def pts_world_to_visible(pts_3d, intrinsics, extrinsics, image_shape):
+def pts_world_to_visible(pts_3d, intrinsics, extrinsics, image_shape, bbox=None):
     camera_coords = pts_world_to_cam(pts_3d, extrinsics)
-    proj, visible = project_to_image(camera_coords, intrinsics, image_shape)
+    proj, visible = project_to_image(camera_coords, intrinsics, image_shape, bbox=bbox)
     return visible
 
 def pts_world_to_unique(pts_3d, colors, intrinsics, extrinsics, image_shape):
@@ -134,13 +142,16 @@ def pts_cam_to_pytorch3d(points_3d):
     points_3d[:, :2] = points_3d[:, :2] * -1
     return points_3d
 
-def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale):
+def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale, bbox=None):
     from misc.scale import median_scene_distance
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 
     # find visible to compute appropriate point radius assuming dense 
-    vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape)
-    this_scale = median_scene_distance(points_3d[vis_mask], extrinsics) / 10.0
+    vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape, bbox)
+    points_3d = points_3d[vis_mask]
+    colors = colors[vis_mask]
+
+    this_scale = median_scene_distance(points_3d, extrinsics) / 10.0
     radius = 1 / ((image_shape[0] * 0.5) * ((this_scale / scale) ** 2.0) + 1e-5)
     radius = max(radius, 1 / (image_shape[0] * 0.5))
     #print(f'radius: {radius}')

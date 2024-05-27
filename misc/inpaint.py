@@ -41,15 +41,18 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
     if pipeline is None:
         initialize_pipeline()
         strength = pipeline.initial_strength
+        guidance_scale = 4.0
         #seed = 78631 
     else:
         strength = pipeline.next_strength 
+        guidance_scale = 25.0
     seed = random.randint(0, 99999)
     print(f'seed is.. {seed}')
     generator = torch.Generator(device="cuda").manual_seed(seed)
 
     pipe_image = Image.fromarray((image.cpu().numpy()).astype(np.uint8))
     pipe_mask = Image.fromarray(((mask_image.sum(dim=2) / 3.0 * 255.0).cpu().numpy()).astype(np.uint8), 'L')
+    print(guidance_scale)
 
     output = pipeline(
       prompt=prompt,
@@ -57,8 +60,8 @@ def run_inpaint(image: Image, mask_image: Image, prompt: str):
       mask_image=pipe_mask,
       strength=strength,  
       generator=generator,
-      guidance_scale=5.0,
-      num_inference_steps=50,  # steps between 15 and 30 work well for us
+      guidance_scale=guidance_scale,
+      num_inference_steps=30,  # steps between 15 and 30 work well for us
     )
 
     return torch.tensor(np.array(output.images[0])).float().to('cuda')

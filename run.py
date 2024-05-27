@@ -88,6 +88,7 @@ def main(args, meta_idx):
 
         # --- get user input ---
         inpaint = False
+        tl, br = None, None
         print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, (i)npaint region, or (t)ext for stable diffusion...")
         user_input, scale = generate_control(args.control, scale, idx)
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
@@ -111,18 +112,14 @@ def main(args, meta_idx):
             tl, br = select_bounding_box(see(image))
             prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
-            image[tl[1]:br[1], tl[0]:br[0], :] = -255
-            #plt.imshow(see(image))
-            #plt.show()
-            # TODO delete those 3D points
         else:
             prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
 
         # --- turn 3d points to image ---
-        gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale)
+        gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale, bbox=(tl, br))
         mask = (gen_image == -255)
-        gen_image = fill(gen_image)      # blur points to make a smooth image
+        #gen_image = fill(gen_image) # blur points to make a smooth image
 
         if inpaint: 
             # --- inpaint pipeline ---
