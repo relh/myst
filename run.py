@@ -15,18 +15,19 @@ import tty
 from argparse import ArgumentParser
 
 import rerun as rr  # pip install rerun-sdk
+from matplotlib import pyplot as plt
 from PIL import Image
 from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 
 from misc.camera import (move_camera, pts_3d_to_img_py3d, pts_3d_to_img_raster,
                          pts_cam_to_world)
-from misc.imutils import fill
+from misc.control import generate_control
+from misc.imutils import fill, select_bounding_box
 from misc.inpaint import run_inpaint
-from misc.control import generate_control 
-from misc.text import generate_prompt
 from misc.prune import density_pruning_py3d
 from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
+from misc.text import generate_prompt
 from misc.three_d import img_to_pts_3d_da, img_to_pts_3d_dust
 
 
@@ -87,7 +88,7 @@ def main(args, meta_idx):
 
         # --- get user input ---
         inpaint = False
-        print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, or (t)ext for stable diffusion...")
+        print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, (i)npaint region, or (t)ext for stable diffusion...")
         user_input, scale = generate_control(args.control, scale, idx)
         if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
             world2cam = move_camera(world2cam, user_input.lower(), scale)  # Assuming an amount of 0.1 for movement/rotation
@@ -105,14 +106,23 @@ def main(args, meta_idx):
         elif user_input.lower() == 'b':
             print(f"{user_input} --> breakpoint...")
             breakpoint()
+        elif user_input.lower() == 'i':
+            print(f"{user_input} --> inpaint region...")
+            tl, br = select_bounding_box(see(image))
+            prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
+            inpaint = True
+            image[tl[1]:br[1], tl[0]:br[0], :] = -255
+            #plt.imshow(see(image))
+            #plt.show()
+            # TODO delete those 3D points
         else:
             prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
 
         # --- turn 3d points to image ---
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale)
-        mask = gen_image == -255
-        #gen_image = fill(gen_image)      # blur points to make a smooth image
+        mask = (gen_image == -255)
+        gen_image = fill(gen_image)      # blur points to make a smooth image
 
         if inpaint: 
             # --- inpaint pipeline ---

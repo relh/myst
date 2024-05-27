@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import kornia
+import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 import rerun as rr  # pip install rerun-sdk
@@ -104,6 +105,42 @@ def depth_to_points_3d(depth_map, K, E, image=None, mask=None):
     #world_coords[:, :, 1] *= -1.0
     #world_coords[:, :, 2] *= -1.0
     return world_coords[mask], image[mask]
+
+def select_bounding_box(image: Image.Image):
+    # Convert PIL image to numpy array
+    image_array = np.array(image)
+
+    # Create a figure and axis
+    fig, ax = plt.subplots()
+    ax.imshow(image_array)
+
+    # List to store the coordinates
+    coords = []
+
+    def onclick(event):
+        # Store the coordinates
+        ix, iy = event.xdata, event.ydata
+        coords.append((ix, iy))
+
+        # Draw a point on the image
+        ax.plot(ix, iy, 'ro')
+        fig.canvas.draw()
+
+        # Stop after two points are selected
+        if len(coords) == 2:
+            plt.close(fig)
+
+    # Connect the click event to the function
+    cid = fig.canvas.mpl_connect('button_press_event', onclick)
+
+    # Display the image and wait for clicks
+    plt.show()
+
+    # Return the coordinates if two points were selected
+    if len(coords) == 2:
+        return [int(x) for x in coords[0]], [int(x) for x in coords[1]]
+    else:
+        return None, None
 
 if __name__ == "__main__":
     pass
