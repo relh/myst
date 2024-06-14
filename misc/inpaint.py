@@ -6,11 +6,16 @@ import numpy as np
 import PIL
 import torch
 import torch.nn.functional as F
-from diffusers import AutoPipelineForInpainting, StableDiffusionInpaintPipeline
+from diffusers import (AutoPipelineForInpainting, DiffusionPipeline,
+                       IFInpaintingPipeline,
+                       IFInpaintingSuperResolutionPipeline,
+                       StableDiffusionInpaintPipeline)
+from diffusers.utils import pt_to_pil
 from einops import rearrange, repeat
 from kornia.geometry.transform import get_affine_matrix2d, warp_affine
 from PIL import Image
 from torchvision.transforms.functional import pad
+from transformers import T5EncoderModel
 
 #torch.set_default_dtype(torch.float32)
 #torch.set_default_device('cuda')
@@ -18,52 +23,81 @@ from torchvision.transforms.functional import pad
 # Global variable for the pipeline
 pipeline = None
 
-def initialize_pipeline():
+def initialize_pipeline(model):
     global pipeline
 
-    #pipeline = AutoPipelineForInpainting.from_pretrained(
-    pipeline = StableDiffusionInpaintPipeline.from_pretrained(
-        #"runwayml/stable-diffusion-inpainting", 
-        "stabilityai/stable-diffusion-2-inpainting",
-        torch_dtype=torch.float16#, variant="fp16"
-    ).to("cuda")
-    pipeline.initial_strength = 1.0
-    pipeline.next_strength = 1.0
+    if model == 'sd2': 
+        #pipeline = AutoPipelineForInpainting.from_pretrained(
+        pipeline = StableDiffusionInpaintPipeline.from_pretrained(
+            #"runwayml/stable-diffusion-inpainting", 
+            "stabilityai/stable-diffusion-2-inpainting",
+            torch_dtype=torch.float16#, variant="fp16"
+        ).to("cuda")
+        pipeline.initial_strength = 1.0
+        pipeline.next_strength = 1.0
 
-    #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
-    pipeline.enable_xformers_memory_efficient_attention()
-    pipeline = pipeline.to("cuda")
+        #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
+        pipeline.enable_xformers_memory_efficient_attention()
+        pipeline = pipeline.to("cuda")
 
+    elif model == 'if':
+        text_encoder = T5EncoderModel.from_pretrained(
+            "DeepFloyd/IF-I-XL-v1.0",
+            subfolder="text_encoder", 
+            load_in_8bit=True, 
+            variant="8bit"
+        )
+
+        pipeline = IFInpaintingPipeline.from_pretrained(
+            "DeepFloyd/IF-I-XL-v1.0", 
+            text_encoder=text_encoder, 
+            unet=None, 
+        )
+
+        sr_pipeline = IFInpaintingSuperResolutionPipeline.from_pretrained(
+            "DeepFloyd/IF-II-L-v1.0", 
+            text_encoder=None, 
+            variant="fp16", 
+            torch_dtype=torch.float16, 
+        )
 
 # Function to run inpainting pipeline
-def run_inpaint(image: Image, mask_image: Image, prompt: str):
+def run_inpaint(image, mask_image, prompt, model, guidance_scale=25.0):
     global pipeline
     if pipeline is None:
-        initialize_pipeline()
-        strength = pipeline.initial_strength
-        guidance_scale = 4.0
-        #seed = 78631 
+        initialize_pipeline(model)
+        seed = 12887 #78631 
     else:
-        strength = pipeline.next_strength 
-        guidance_scale = 25.0
-    seed = random.randint(0, 99999)
+        seed = random.randint(0, 99999)
+    strength = 1.0
     print(f'seed is.. {seed}')
-    generator = torch.Generator(device="cuda").manual_seed(seed)
 
+    generator = torch.Generator(device="cuda").manual_seed(seed)
     pipe_image = Image.fromarray((image.cpu().numpy()).astype(np.uint8))
     pipe_mask = Image.fromarray(((mask_image.sum(dim=2) / 3.0 * 255.0).cpu().numpy()).astype(np.uint8), 'L')
-    print(guidance_scale)
 
-    output = pipeline(
-      prompt=prompt,
-      image=pipe_image,
-      mask_image=pipe_mask,
-      strength=strength,  
-      generator=generator,
-      guidance_scale=guidance_scale,
-      num_inference_steps=30,  # steps between 15 and 30 work well for us
-    )
+    if model == 'sd2':
+        print(guidance_scale)
+        output = pipeline(
+          prompt=prompt,
+          image=pipe_image,
+          mask_image=pipe_mask,
+          strength=strength,  
+          generator=generator,
+          guidance_scale=guidance_scale,
+          num_inference_steps=30,  # steps between 15 and 30 work well for us
+        )
+    elif model == 'if':
+        prompt_embeds, negative_embeds = pipeline.encode_prompt(prompt)
 
+        output = pipeline(
+            image=pipe_image,
+            mask_image=pipe_mask,
+            prompt_embeds=prompt_embeds,
+            negative_prompt_embeds=negative_embeds, 
+            #output_type="pt",
+            generator=generator,
+        )
     return torch.tensor(np.array(output.images[0])).float().to('cuda')
 
 # You might want to initialize the pipeline when the script is imported

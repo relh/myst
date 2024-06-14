@@ -142,5 +142,19 @@ def select_bounding_box(image: Image.Image):
     else:
         return None, None
 
+def resize_and_pad(image, max_dim=512):
+    # Step 1: Resize the image to have the max dimension as 512 while maintaining aspect ratio
+    original_size = image.size
+    ratio = max_dim / max(original_size)
+    new_size = tuple([int(x * ratio) for x in original_size])
+    image = image.resize(new_size, Image.LANCZOS)
+
+    # Step 2: Pad the image to make it 512x512
+    padded_image = Image.new("RGB", (max_dim, max_dim))
+    padded_image.paste(image, ((max_dim - new_size[0]) // 2,
+                               (max_dim - new_size[1]) // 2))
+
+    return padded_image
+
 if __name__ == "__main__":
     pass

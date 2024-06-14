@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import numpy as np
 import torch
+import torchvision.transforms as transforms
+from PIL import Image
 
 torch.backends.cuda.preferred_linalg_library()
 
@@ -22,7 +25,7 @@ from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 from misc.camera import (move_camera, pts_3d_to_img_py3d, pts_3d_to_img_raster,
                          pts_cam_to_world)
 from misc.control import generate_control
-from misc.imutils import fill, select_bounding_box
+from misc.imutils import fill, select_bounding_box, resize_and_pad
 from misc.inpaint import run_inpaint
 from misc.prune import density_pruning_py3d
 from misc.scale import median_scene_distance
@@ -46,14 +49,17 @@ def main(args, meta_idx):
     while True:
         # --- setup initial scene ---
         if image is None: 
-            orig_prompt = prompt = generate_prompt(args.prompt)
-            print(prompt)
-
             mask = torch.ones(size, size, 3)
-            with torch.no_grad():
-                image = run_inpaint(torch.zeros(size, size, 3), mask,\
-                                    prompt=prompt).to(torch.uint8)
-                #image = run_supersample(image, mask, prompt)
+            if args.image != 'gen':
+                orig_prompt = prompt = ''
+                image = torch.tensor(np.array(resize_and_pad(Image.open(args.image))))
+            else:
+                orig_prompt = prompt = generate_prompt(args.prompt)
+                print(prompt)
+                with torch.no_grad():
+                    image = run_inpaint(torch.zeros(size, size, 3), mask,\
+                                        prompt=prompt, guidance_scale=7.0, model=args.model).to(torch.uint8)
+                    #image = run_supersample(image, mask, prompt)
             all_images = [image.detach()]
         else:
             image = gen_image.to(torch.uint8)
@@ -78,7 +84,7 @@ def main(args, meta_idx):
         see = lambda x: x.detach().cpu().numpy()
         inpy = see(intrinsics)
         rr.set_time_sequence("frame", idx+1)
-        rr.log(f"world/points", rr.Points3D(see(pts_3d), colors=see(rgb_3d)))
+        rr.log("world/points", rr.Points3D(see(pts_3d), colors=see(rgb_3d)))
         rr.log("world/camera", rr.Transform3D(translation=see(world2cam[:3, 3]),
                                               mat3x3=see(world2cam[:3, :3]), from_parent=True))
         rr.log("world/camera/image", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
@@ -125,7 +131,7 @@ def main(args, meta_idx):
             # --- inpaint pipeline ---
             gen_image[mask] = -1.0
             with torch.no_grad():
-                gen_image[mask] = run_inpaint(gen_image, mask.float(), prompt=prompt)[mask]
+                gen_image[mask] = run_inpaint(gen_image, mask.float(), prompt=prompt, model=args.model)[mask]
             gen_image = gen_image.to(torch.uint8)
             #gen_image = run_supersample(gen_image, mask, prompt)
 
@@ -165,6 +171,8 @@ if __name__ == "__main__":
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
     parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')
+    parser.add_argument('--image', type=str, default='gen', help='gen / path')
+    parser.add_argument('--model', type=str, default='sd2', help='sd2 / if')
     args = parser.parse_args()
 
     #with torch.autocast(device_type="cuda"):

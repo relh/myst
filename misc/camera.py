@@ -173,5 +173,15 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
         compositor=NormWeightedCompositor(background_color=[-1.0, -1.0, -1.0])
     )
     
-    image = renderer(point_cloud)[0, ..., :3] * 255.0
-    return image
+    if point_cloud.isempty():
+        print("Point cloud is empty. Returning blank image.")
+        blank_image = torch.zeros((512, 512, 3), dtype=torch.uint8)  # Adjust the size and dtype as needed
+        return blank_image
+
+    try:
+        image = renderer(point_cloud)[0, ..., :3] * 255.0
+        return image
+    except RuntimeError as e:
+        print(f"RuntimeError during rendering: {e}")
+        blank_image = torch.zeros((512, 512, 3), dtype=torch.uint8)  # Return blank image on error as well
+        return blank_image
