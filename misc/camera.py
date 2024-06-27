@@ -175,7 +175,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     
     if point_cloud.isempty():
         print("Point cloud is empty. Returning blank image.")
-        blank_image = torch.zeros((512, 512, 3), dtype=torch.uint8)  # Adjust the size and dtype as needed
+        blank_image = torch.zeros((512, 512, 3), dtype=torch.float32, device='cuda')  # Adjust the size and dtype as needed
         return blank_image
 
     try:
@@ -183,5 +183,5 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
         return image
     except RuntimeError as e:
         print(f"RuntimeError during rendering: {e}")
-        blank_image = torch.zeros((512, 512, 3), dtype=torch.uint8)  # Return blank image on error as well
+        blank_image = torch.zeros((512, 512, 3), dtype=torch.float32, device='cuda')  # Return blank image on error as well
         return blank_image
