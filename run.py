@@ -17,6 +17,7 @@ import termios
 import tty
 from argparse import ArgumentParser
 
+import lpips
 import rerun as rr  # pip install rerun-sdk
 from matplotlib import pyplot as plt
 from PIL import Image
@@ -25,8 +26,9 @@ from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
 from misc.camera import (move_camera, pts_3d_to_img_py3d, pts_3d_to_img_raster,
                          pts_cam_to_world)
 from misc.control import generate_control
-from misc.imutils import fill, select_bounding_box, resize_and_pad
+from misc.imutils import fill, resize_and_pad, select_bounding_box
 from misc.inpaint import run_inpaint
+from misc.perceptual import *
 from misc.prune import density_pruning_py3d
 from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
@@ -134,6 +136,16 @@ def main(args, meta_idx):
                 gen_image[mask] = run_inpaint(gen_image, mask.float(), prompt=prompt, model=args.model)[mask]
             gen_image = gen_image.to(torch.uint8)
             #gen_image = run_supersample(gen_image, mask, prompt)
+
+            '''
+            # use LPIPS to ditch ugly
+            score_map, unrealistic_mask = evaluate_image_patches(all_images[0], gen_image)
+            urm = unrealistic_mask.reshape(8, 8).T
+            urm = einops.repeat(urm, 'h w -> 1 3 h w')
+            urm = F.interpolate(urm.float(), (512, 512))
+            urm = einops.rearrange(urm.bool(), 'b c h w -> h w (b c)')
+            gen_image[urm] = 0
+            '''
 
             # --- add to duster list ---
             all_images.append(gen_image.detach())
