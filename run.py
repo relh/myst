@@ -97,9 +97,9 @@ def main(args, meta_idx):
         # --- get user input ---
         inpaint = False
         tl, br = None, None
-        print("press (w, a, s, d, q, e) move, (f)ill, (u)psample, (k)ill, (b)reakpoint, (i)npaint region, or (t)ext for stable diffusion...")
+        print("press (w, a, s, d, i, j, k, l) move, (f)ill, (u)psample, (e)nd, (b)reakpoint, (c)hange region, or (t)ext for stable diffusion...")
         user_input, scale = generate_control(args.control, scale, idx)
-        if user_input.lower() in ['w', 'a', 's', 'd', 'q', 'e']:
+        if user_input.lower() in ['w', 'a', 's', 'd', 'i', 'j', 'k', 'l']:
             world2cam = move_camera(world2cam, user_input.lower(), scale)  # Assuming an amount of 0.1 for movement/rotation
             print(f"{user_input} --> camera moved/rotated, extrinsics.") #, world2cam)
         elif user_input.lower() == 'f':
@@ -109,14 +109,14 @@ def main(args, meta_idx):
         elif user_input.lower() == 'u':
             print(f"{user_input} --> upsample...")
             breakpoint()
-        elif user_input.lower() == 'k':
-            print(f"{user_input} --> kill...")
+        elif user_input.lower() == 'e':
+            print(f"{user_input} --> end...")
             break
         elif user_input.lower() == 'b':
             print(f"{user_input} --> breakpoint...")
             breakpoint()
-        elif user_input.lower() == 'i':
-            print(f"{user_input} --> inpaint region...")
+        elif user_input.lower() == 'c':
+            print(f"{user_input} --> change region...")
             tl, br = select_bounding_box(see(image))
             prompt = input(f"{user_input} --> enter stable diffusion prompt: ")
             inpaint = True
@@ -126,10 +126,11 @@ def main(args, meta_idx):
 
         # --- turn 3d points to image ---
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale, bbox=(tl, br))
-        mask = ((gen_image == -255).sum(dim=2) == 3)# | (conf[-1] < 1.0)
-        #gen_image = fill(gen_image) # blur points to make a smooth image
+        mask = ((gen_image == -255).sum(dim=2) == 3) | ((gen_image == 0).sum(dim=2) == 3)
 
         if inpaint: 
+            #gen_image = fill(gen_image) # blur points to make a smooth image
+
             # --- inpaint pipeline ---
             gen_image[mask] = -1.0
             with torch.no_grad():

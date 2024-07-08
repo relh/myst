@@ -136,7 +136,7 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
     '''
 
     # --- either get pts or run global optimization ---
-    loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01) # 60/s
+    loss = scene.compute_global_alignment(init='mst', niter=200, schedule='cosine', lr=0.01) # 60/s
     #loss = scene.compute_global_alignment(init='msp', niter=200, schedule='cosine', lr=0.01) # 50/s
     #loss = scene.compute_global_alignment(init='known_poses', niter=200, schedule='cosine', lr=0.01)
     #scene = scene.clean_pointcloud()
@@ -152,8 +152,8 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
     depth_maps = use(torch.stack(scene.get_depthmaps()))
     conf = use(torch.stack(scene.get_conf()))
 
-    pts_3d = pts_3d[conf > 0.75]
-    rgb_3d = rgb_3d[conf > 0.75]
+    pts_3d = pts_3d[conf > 0.85]
+    rgb_3d = rgb_3d[conf > 0.85]
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\

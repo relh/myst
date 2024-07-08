@@ -43,7 +43,7 @@ def generate_prompt(prompt):
     if prompt == 'me':
         return input(f"enter stable diffusion initial scene: ")
     elif prompt == 'default':
-        return 'A high-resolution photo of a kitchen.'
+        return 'A high-resolution image of a kitchen.'
     elif prompt == 'doors':
         lead_in = random.choice(lead_ins)
         facade = random.choice(facades)# + doors) #Combining portals 

@@ -62,12 +62,13 @@ def initialize_pipeline(model):
         )
 
 # Function to run inpainting pipeline
-def run_inpaint(image, mask_image, prompt, model, guidance_scale=25.0):
+def run_inpaint(image, mask_image, prompt, model, guidance_scale=12.0):
     global pipeline
     if pipeline is None:
         initialize_pipeline(model)
-        #seed = 12887 #78631 
-        seed = 78631 
+        #seed = 12887
+        #seed = 78631 
+        seed = random.randint(0, 99999)
     else:
         seed = random.randint(0, 99999)
     strength = 1.0
@@ -86,7 +87,7 @@ def run_inpaint(image, mask_image, prompt, model, guidance_scale=25.0):
           strength=strength,  
           generator=generator,
           guidance_scale=guidance_scale,
-          num_inference_steps=30,  # steps between 15 and 30 work well for us
+          num_inference_steps=20,  # steps between 15 and 30 work well for us
         )
     elif model == 'if':
         prompt_embeds, negative_embeds = pipeline.encode_prompt(prompt)

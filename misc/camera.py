@@ -18,7 +18,8 @@ def move_camera(extrinsics, direction, amount):
     Move the camera considering its orientation or rotate left/right.
     
     :param extrinsics: The current extrinsics matrix.
-    :param direction: 'w' (forward), 's' (backward), 'a' (left rotate), 'd' (right rotate).
+    :param direction: 'w' (forward), 's' (backward), 'a' (left translate), 'd' (right translate).
+    :param direction: 'i' (up), 'k' (down), 'j' (left rotate), 'l' (right rotate).
     :param amount: The amount to move or rotate.
     """
     # Extract rotation matrix R and translation vector t from the extrinsics matrix
@@ -28,9 +29,13 @@ def move_camera(extrinsics, direction, amount):
         # Direction vector for forward/backward 
         amount = (-amount if direction == 'w' else amount)
         extrinsics[:3, 3] += torch.tensor([0, 0, amount], device=extrinsics.device).float()
-    elif direction in ['q', 'e']:
+    elif direction in ['a', 'd']:
+        # Direction vector for left/right 
+        amount = (-amount if direction == 'd' else amount)
+        extrinsics[:3, 3] += torch.tensor([amount, 0, 0], device=extrinsics.device).float()
+    elif direction in ['i', 'k']:
         # Rotation angle (in radians). Positive for 'e' (down), negative for 'q' (up)
-        angle = torch.tensor(-amount if direction == 'e' else amount)
+        angle = torch.tensor(-amount if direction == 'i' else amount)
         # Rotation matrix around the X-axis (assuming X is forward/backward)
         rotation_matrix = torch.tensor([
             [1, 0, 0, 0],
@@ -40,9 +45,9 @@ def move_camera(extrinsics, direction, amount):
         ], device=extrinsics.device)
         # Apply rotation to the extrinsics matrix
         extrinsics = torch.matmul(rotation_matrix, extrinsics)
-    elif direction in ['a', 'd']:
+    elif direction in ['j', 'l']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
-        angle = torch.tensor(-amount if direction == 'd' else amount)
+        angle = torch.tensor(-amount if direction == 'l' else amount)
         # Rotation matrix around the Y-axis (assuming Y is up)
         rotation_matrix = torch.tensor([
             [torch.cos(angle), 0, torch.sin(angle), 0],
@@ -103,7 +108,11 @@ def pts_world_to_unique(pts_3d, colors, intrinsics, extrinsics, image_shape):
     proj = proj#[inverse_indices]
     return proj, colors, pts_3d, pts_cam, camera_coords
 
-def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape, cameras=None):
+def pts_cam_to_pytorch3d(points_3d):
+    points_3d[:, :2] = points_3d[:, :2] * -1
+    return points_3d
+
+def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape, cameras=None, scale=None, bbox=None):
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 
     camera_coords = pts_world_to_cam(points_3d, extrinsics)
@@ -138,10 +147,6 @@ def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape,
 
     return image_t.clone().float()
 
-def pts_cam_to_pytorch3d(points_3d):
-    points_3d[:, :2] = points_3d[:, :2] * -1
-    return points_3d
-
 def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale, bbox=None):
     from misc.scale import median_scene_distance
     image_shape = (int(image_shape[0]), int(image_shape[1]))
@@ -165,7 +170,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
         radius=radius,
-        points_per_pixel=3,
+        points_per_pixel=1,
     )
     
     renderer = PointsRenderer(
