@@ -126,11 +126,12 @@ def main(args, meta_idx):
 
         # --- turn 3d points to image ---
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale, bbox=(tl, br))
+
+        if args.renderer == 'raster':
+            gen_image = fill(gen_image) # blur points to make a smooth image
         mask = ((gen_image == -255).sum(dim=2) == 3) | ((gen_image == 0).sum(dim=2) == 3)
 
         if inpaint: 
-            #gen_image = fill(gen_image) # blur points to make a smooth image
-
             # --- inpaint pipeline ---
             gen_image[mask] = -1.0
             with torch.no_grad():
@@ -155,7 +156,7 @@ def main(args, meta_idx):
             # --- lift img to 3d ---
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm, conf)
             scale = median_scene_distance(pts_3d, world2cam) / 10.0
-            #pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
         idx += 1
     rr.script_teardown(args)
 
@@ -181,7 +182,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
+    parser.add_argument('--renderer', type=str, default='raster', help='raster / py3d')
     parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
     parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')
     parser.add_argument('--image', type=str, default='gen', help='gen / path')
