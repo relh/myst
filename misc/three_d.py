@@ -85,7 +85,7 @@ def load_images(images, size, square_ok=True):
 
     return imgs
 
-def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
+def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, conf=None):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -115,12 +115,12 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
         all_cam2world = [x for x in all_cam2world]
         known_poses = [False if x is None else True for x in all_cam2world]
 
-        repl_intrinsics = [intrinsics.cpu().numpy() for x in all_cam2world]
-        known_intrinsics = [True for x in repl_intrinsics]
+        #repl_intrinsics = [intrinsics.cpu().numpy() for x in all_cam2world]
+        #known_intrinsics = [True for x in repl_intrinsics]
 
         # --- set pose and focal ---
         scene.preset_pose(all_cam2world, known_poses)
-        scene.preset_intrinsics(repl_intrinsics, known_intrinsics)
+        #scene.preset_intrinsics(repl_intrinsics, known_intrinsics)
 
         # --- set depth maps ---
         #for i, this_dm in enumerate(dm):
@@ -136,7 +136,7 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
     '''
 
     # --- either get pts or run global optimization ---
-    loss = scene.compute_global_alignment(init='mst', niter=300, schedule='cosine', lr=0.01) # 60/s
+    loss = scene.compute_global_alignment(init='mst', niter=100, schedule='cosine', lr=0.01) # 60/s
     #loss = scene.compute_global_alignment(init='msp', niter=200, schedule='cosine', lr=0.01) # 50/s
     #loss = scene.compute_global_alignment(init='known_poses', niter=200, schedule='cosine', lr=0.01)
     #scene = scene.clean_pointcloud()
@@ -149,14 +149,19 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None):
     intrinsics = use(scene.get_intrinsics()[-1])
     pts_3d = use(torch.stack(scene.get_pts3d()))
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
-    depth_maps = scene.get_depthmaps()
+    depth_maps = use(torch.stack(scene.get_depthmaps()))
+    conf = use(torch.stack(scene.get_conf()))
+
+    pts_3d = pts_3d[conf > 0.75]
+    rgb_3d = rgb_3d[conf > 0.75]
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
            world2cam,\
            all_cam2world,\
            intrinsics,\
-           depth_maps
+           depth_maps,\
+           conf
 
 def img_to_pts_3d_da(color_image, views=None):
     global da_model

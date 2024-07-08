@@ -66,7 +66,8 @@ def run_inpaint(image, mask_image, prompt, model, guidance_scale=25.0):
     global pipeline
     if pipeline is None:
         initialize_pipeline(model)
-        seed = 12887 #78631 
+        #seed = 12887 #78631 
+        seed = 78631 
     else:
         seed = random.randint(0, 99999)
     strength = 1.0
@@ -74,7 +75,7 @@ def run_inpaint(image, mask_image, prompt, model, guidance_scale=25.0):
 
     generator = torch.Generator(device="cuda").manual_seed(seed)
     pipe_image = Image.fromarray((image.cpu().numpy()).astype(np.uint8))
-    pipe_mask = Image.fromarray(((mask_image.sum(dim=2) / 3.0 * 255.0).cpu().numpy()).astype(np.uint8), 'L')
+    pipe_mask = Image.fromarray(((mask_image * 255.0).cpu().numpy()).astype(np.uint8), 'L')
 
     if model == 'sd2':
         print(guidance_scale)
