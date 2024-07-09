@@ -90,9 +90,9 @@ def main(args, meta_idx):
         rr.log("world/camera", rr.Transform3D(translation=see(world2cam[:3, 3]),
                                               mat3x3=see(world2cam[:3, :3]), from_parent=True))
         rr.log("world/camera/image", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
-        rr.log("world/camera/image", rr.Image(see(image)).compress(jpeg_quality=75))
+        rr.log("world/camera/image", rr.Image(see(image)))
         rr.log("world/camera/mask", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
-        rr.log("world/camera/mask", rr.Image((mask.float() * 255.0).to(torch.uint8).cpu().numpy()).compress(jpeg_quality=100))
+        rr.log("world/camera/mask", rr.Image((mask.float() * 255.0).to(torch.uint8).cpu().numpy()))
 
         # --- get user input ---
         inpaint = False
@@ -127,8 +127,8 @@ def main(args, meta_idx):
         # --- turn 3d points to image ---
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale, bbox=(tl, br))
 
-        if args.renderer == 'raster':
-            gen_image = fill(gen_image) # blur points to make a smooth image
+        #if args.renderer == 'raster':
+        #    gen_image = fill(gen_image) # blur points to make a smooth image
         mask = ((gen_image == -255).sum(dim=2) == 3) | ((gen_image == 0).sum(dim=2) == 3)
 
         if inpaint: 
@@ -182,7 +182,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
     parser.add_argument('--depth', type=str, default='dust', help='da / dust')
-    parser.add_argument('--renderer', type=str, default='raster', help='raster / py3d')
+    parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
     parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')
     parser.add_argument('--image', type=str, default='gen', help='gen / path')

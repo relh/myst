@@ -152,9 +152,9 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 
     # find visible to compute appropriate point radius assuming dense 
-    vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape, bbox)
-    points_3d = points_3d[vis_mask]
-    colors = colors[vis_mask]
+    #vis_mask = pts_world_to_visible(points_3d, intrinsics, extrinsics, image_shape, bbox)
+    #points_3d = points_3d[vis_mask]
+    #colors = colors[vis_mask]
 
     this_scale = median_scene_distance(points_3d, extrinsics) / 10.0
     radius = 1 / ((image_shape[0] * 0.5) * ((this_scale / scale) ** 2.0) + 1e-5)
@@ -169,7 +169,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
-        radius=radius,
+        #radius=radius,
         points_per_pixel=1,
     )
     
@@ -184,7 +184,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
         return blank_image
 
     try:
-        image = renderer(point_cloud)[0, ..., :3] * 255.0
+        image = renderer(point_cloud)[0] * 255.0
         return image
     except RuntimeError as e:
         print(f"RuntimeError during rendering: {e}")

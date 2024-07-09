@@ -55,26 +55,6 @@ def load_images(images, size, square_ok=True):
     imgs = []
     for image in images:
         img = exif_transpose(image)
-        W1, H1 = img.size
-        if size == 224:
-            # resize short side to 224 (then crop)
-            img = _resize_pil_image(img, round(size * max(W1/H1, H1/W1)))
-        else:
-            # resize long side to 512
-            img = _resize_pil_image(img, size)
-        W, H = img.size
-        cx, cy = W//2, H//2
-        if size == 224:
-            half = min(cx, cy)
-            img = img.crop((cx-half, cy-half, cx+half, cy+half))
-        else:
-            halfw, halfh = ((2*cx)//16)*8, ((2*cy)//16)*8
-            if not (square_ok) and W == H:
-                halfh = 3*halfw/4
-            img = img.crop((cx-halfw, cy-halfh, cx+halfw, cy+halfh))
-
-        W2, H2 = img.size
-        print(f' - adding image with resolution {W1}x{H1} --> {W2}x{H2}')
         imgs.append(dict(img=ImgNorm(img)[None], true_shape=np.int32(
             [img.size[::-1]]), idx=len(imgs), instance=str(len(imgs))))
 
@@ -152,8 +132,8 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
     depth_maps = use(torch.stack(scene.get_depthmaps()))
     conf = use(torch.stack(scene.get_conf()))
 
-    pts_3d = pts_3d[conf > 0.85]
-    rgb_3d = rgb_3d[conf > 0.85]
+    pts_3d = pts_3d[conf > 0.5]
+    rgb_3d = rgb_3d[conf > 0.5]
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
