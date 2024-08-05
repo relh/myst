@@ -4,7 +4,8 @@
 import sys
 
 sys.path.append('depth_anything/metric_depth/')
-sys.path.append('dust3r/')
+sys.path.append('mast3r/dust3r/')
+sys.path.append('mast3r/')
 
 import argparse
 import copy
@@ -31,7 +32,12 @@ from depth_anything.metric_depth.zoedepth.utils.config import get_config
 from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 from dust3r.image_pairs import make_pairs
 from dust3r.inference import inference
-from dust3r.model import AsymmetricCroCo3DStereo
+from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
+from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
+from mast3r.utils.misc import hash_md5
+#from dust3r.model import AsymmetricCroCo3DStereo
+from mast3r.model import AsymmetricMASt3R
+from mast3r.fast_nn import fast_reciprocal_NNs
 from dust3r.utils.image import rgb
 from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
                         pts3d_to_trimesh)
@@ -53,7 +59,9 @@ def _resize_pil_image(img, long_edge_size):
 
 def load_images(images, size, square_ok=True):
     imgs = []
-    for image in images:
+    filelist = []
+    for i, image in enumerate(images):
+        filelist.append(str(i))
         img = exif_transpose(image)
         imgs.append(dict(img=ImgNorm(img)[None], true_shape=np.int32(
             [img.size[::-1]]), idx=len(imgs), instance=str(len(imgs))))
@@ -62,27 +70,35 @@ def load_images(images, size, square_ok=True):
     if len(imgs) == 1:
         imgs = [imgs[0], copy.deepcopy(imgs[0])]
         imgs[1]['idx'] = 1
+        filelist = [filelist[0], filelist[0] + '_2']
 
-    return imgs
+    return imgs, filelist
 
 def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, conf=None):
     global dust_model
     device = 'cuda'
     batch_size = 1
     if dust_model is None:
-        weights_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
-        dust_model = AsymmetricCroCo3DStereo.from_pretrained(weights_path).to('cuda')
+        #weights_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
+        weights_path = 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth'
+        dust_model = AsymmetricMASt3R.from_pretrained(weights_path).to('cuda')
 
     # --- whether to standalone index 0 image or not ---
     images = [Image.fromarray(image.cpu().numpy()) for image in images]
     num_images = len(images)
-    images = load_images(images, size=512)
+    images, filelist = load_images(images, size=512)
 
     # --- run dust3r ---
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=False if num_images > 2 else True)
     output = inference(pairs, dust_model, device, batch_size=batch_size)
-    mode = GlobalAlignerMode.ModularPointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
-    scene = global_aligner(output, device=device, mode=mode)
+
+    scene = sparse_global_alignment(filelist, pairs, os.path.join('./', 'cache'),
+                                dust_model, lr1=0.07, niter1=500, lr2=0.014, niter2=200, device=device,
+                                opt_depth='depth' in 'refine', shared_intrinsics=False,
+                                matching_conf_thr=5.)#, **kw)
+
+    #mode = GlobalAlignerMode.ModularPointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
+    #scene = global_aligner(output, device=device, mode=mode)
 
     # --- either get pts or run global optimization ---
     '''
@@ -116,7 +132,7 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
     '''
 
     # --- either get pts or run global optimization ---
-    loss = scene.compute_global_alignment(init='mst', niter=200, schedule='cosine', lr=0.01) # 60/s
+    #loss = scene.compute_global_alignment(init='mst', niter=200, schedule='cosine', lr=0.01) # 60/s
     #loss = scene.compute_global_alignment(init='msp', niter=200, schedule='cosine', lr=0.01) # 50/s
     #loss = scene.compute_global_alignment(init='known_poses', niter=200, schedule='cosine', lr=0.01)
     #scene = scene.clean_pointcloud()
