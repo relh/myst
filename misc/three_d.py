@@ -7,6 +7,7 @@ sys.path.append('depth_anything/metric_depth/')
 sys.path.append('mast3r/dust3r/')
 sys.path.append('mast3r/')
 
+import einops
 import argparse
 import copy
 import functools
@@ -142,14 +143,17 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
     use = lambda x: x.float().cuda().detach()
     all_cam2world = [use(x) for x in scene.get_im_poses()]
     world2cam = torch.linalg.inv(all_cam2world[-1])
-    intrinsics = use(scene.get_intrinsics()[-1])
-    pts_3d = use(torch.stack(scene.get_pts3d()))
+    intrinsics = use(scene.intrinsics[-1])
+    pts3d, depth_maps, confs = scene.get_dense_pts3d()
+    pts_3d = use(torch.stack(pts3d))[-1]
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
-    depth_maps = use(torch.stack(scene.get_depthmaps()))
-    conf = use(torch.stack(scene.get_conf()))
+    rgb_3d = einops.rearrange(rgb_3d, 'b h w c -> b c (h w)')[-1]
+    depth_maps = use(torch.stack(depth_maps))
+    conf = use(torch.stack(confs))
+    conf = conf.reshape(conf.shape[0], -1)[-1]
 
-    pts_3d = pts_3d[conf > 0.5]
-    rgb_3d = rgb_3d[conf > 0.5]
+    pts_3d = pts_3d#[conf > 0.5]
+    rgb_3d = einops.rearrange(rgb_3d, 'c x -> x c')#[conf > 0.5]
 
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
