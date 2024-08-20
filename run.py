@@ -45,6 +45,7 @@ def main(args, meta_idx, tmp_dir=None):
     img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
+    sequence = []
     cameras = None
     pts_3d = None
     image = None
@@ -71,7 +72,7 @@ def main(args, meta_idx, tmp_dir=None):
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, tmp_dir=tmp_dir)
-            scale = median_scene_distance(pts_3d, world2cam) / 10.0
+            scale = median_scene_distance(pts_3d, world2cam) / 30.0
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
         # --- establish camera parameters ---
@@ -100,7 +101,7 @@ def main(args, meta_idx, tmp_dir=None):
         inpaint = False
         tl, br = None, None
         print("press (w, a, s, d, i, j, k, l) move, (f)ill, (u)psample, (e)nd, (b)reakpoint, (c)hange region, or (t)ext for stable diffusion...")
-        user_input, scale = generate_control(args.control, scale, idx)
+        user_input, amount, sequence = generate_control(args.control, scale, idx, sequence=sequence)
         if user_input.lower() in ['w', 'a', 's', 'd', 'i', 'j', 'k', 'l']:
             world2cam = move_camera(world2cam, user_input.lower(), scale)  # Assuming an amount of 0.1 for movement/rotation
             print(f"{user_input} --> camera moved/rotated, extrinsics.") #, world2cam)
@@ -157,7 +158,7 @@ def main(args, meta_idx, tmp_dir=None):
 
             # --- lift img to 3d ---
             pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm, conf, tmp_dir=tmp_dir)
-            scale = median_scene_distance(pts_3d, world2cam) / 10.0
+            scale = median_scene_distance(pts_3d, world2cam) / 30.0
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
         idx += 1
     rr.script_teardown(args)

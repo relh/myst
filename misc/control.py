@@ -25,13 +25,13 @@ def get_keypress():
         termios.tcsetattr(fd, termios.TCSADRAIN, original_attributes)
     return key
 
-def generate_control(control, amount, idx):
+def generate_control(control, amount, idx, sequence=[]):
     if idx == 0:
         # choose from moving and new prompts 
         # choose 4-9 1
         sequence = []
         if control == 'auto':
-            rot = random.choice(['a', 'd'])
+            rot = random.choice(['j', 'l'])
             trans = random.choice(['w', 's', 's', 's'])
 
             rot_num = random.choice([2, 3, 4, 5]) 
@@ -77,11 +77,11 @@ def generate_control(control, amount, idx):
         print(f'ai sequence is... {sequence}')
 
     if control == 'me':
-        return get_keypress(), amount 
+        return get_keypress(), amount, sequence 
     else:
-        if idx >= len(sequence): return 'k', None
-        user_input, scale = sequence[idx]
-    return user_input, scale
+        if idx >= len(sequence): return 'e', None, sequence 
+        user_input, amount = sequence[idx]
+    return user_input, amount, sequence
 
 if __name__ == "__main__":
     # Generate and print a sample sequence 
