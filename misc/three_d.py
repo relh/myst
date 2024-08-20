@@ -75,7 +75,7 @@ def load_images(images, size, square_ok=True):
 
     return imgs, filelist
 
-def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, conf=None):
+def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -91,10 +91,10 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
 
     # --- run dust3r ---
     pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=False if num_images > 2 else True)
-    output = inference(pairs, dust_model, device, batch_size=batch_size)
+    #output = inference(pairs, dust_model, device, batch_size=batch_size)
 
-    scene = sparse_global_alignment(filelist, pairs, os.path.join('./', 'cache'),
-                                dust_model, lr1=0.07, niter1=500, lr2=0.014, niter2=200, device=device,
+    scene = sparse_global_alignment(filelist, pairs, tmp_dir,
+                                dust_model, lr1=0.07, niter1=100, lr2=0.014, niter2=100, device=device,
                                 opt_depth='depth' in 'refine', shared_intrinsics=False,
                                 matching_conf_thr=5.)#, **kw)
 
@@ -163,7 +163,7 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
            depth_maps,\
            conf
 
-def img_to_pts_3d_da(color_image, views=None):
+def img_to_pts_3d_da(color_image, views=None, tmp_dir=None):
     global da_model
     if da_model is None:
         config = get_config('zoedepth', "eval", 'nyu')

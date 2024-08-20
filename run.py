@@ -13,9 +13,11 @@ torch.backends.cuda.preferred_linalg_library()
 import os
 import pickle
 import sys
+import tempfile
 import termios
 import tty
 from argparse import ArgumentParser
+from contextlib import nullcontext
 
 import lpips
 import rerun as rr  # pip install rerun-sdk
@@ -36,7 +38,7 @@ from misc.text import generate_prompt
 from misc.three_d import img_to_pts_3d_da, img_to_pts_3d_dust
 
 
-def main(args, meta_idx):
+def main(args, meta_idx, tmp_dir=None):
     # --- setup rerun args ---
     rr.script_setup(args, f"{meta_idx}myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
@@ -68,7 +70,7 @@ def main(args, meta_idx):
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images)
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, tmp_dir=tmp_dir)
             scale = median_scene_distance(pts_3d, world2cam) / 10.0
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
@@ -154,7 +156,7 @@ def main(args, meta_idx):
             all_cam2world.append(torch.linalg.inv(world2cam))
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm, conf)
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm, conf, tmp_dir=tmp_dir)
             scale = median_scene_distance(pts_3d, world2cam) / 10.0
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
         idx += 1
@@ -196,4 +198,5 @@ if __name__ == "__main__":
 
     # OOM after 130 or so
     for meta_idx in range(100):
-        main(args, meta_idx+how_far)  
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            main(args, meta_idx+how_far, tmp_dir=tmpdirname)  
