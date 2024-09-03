@@ -7,7 +7,6 @@ sys.path.append('depth_anything/metric_depth/')
 sys.path.append('mast3r/dust3r/')
 sys.path.append('mast3r/')
 
-import einops
 import argparse
 import copy
 import functools
@@ -15,6 +14,7 @@ import math
 import os
 import tempfile
 
+import einops
 import gradio
 import matplotlib.pyplot as pl
 import numpy as np
@@ -33,15 +33,16 @@ from depth_anything.metric_depth.zoedepth.utils.config import get_config
 from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 from dust3r.image_pairs import make_pairs
 from dust3r.inference import inference
-from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
-from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
-from mast3r.utils.misc import hash_md5
-#from dust3r.model import AsymmetricCroCo3DStereo
-from mast3r.model import AsymmetricMASt3R
-from mast3r.fast_nn import fast_reciprocal_NNs
 from dust3r.utils.image import rgb
 from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
                         pts3d_to_trimesh)
+from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
+from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
+from mast3r.fast_nn import fast_reciprocal_NNs
+#from dust3r.model import AsymmetricCroCo3DStereo
+from mast3r.model import AsymmetricMASt3R
+from mast3r.utils.misc import hash_md5
+from misc.camera import pts_cam_to_world
 from misc.supersample import supersample_point_cloud
 
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -122,7 +123,7 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
            depth_maps,\
            conf.reshape(-1, 1)
 
-def img_to_pts_3d_da(color_image, views=None, tmp_dir=None):
+def img_to_pts_3d_da(color_image, all_cam2world, extrinsics=None, intrinsics=None, tmp_dir=None):
     global da_model
     if da_model is None:
         config = get_config('zoedepth', "eval", 'nyu')
@@ -159,7 +160,64 @@ def img_to_pts_3d_da(color_image, views=None, tmp_dir=None):
 
     colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
     colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
-    return points_camera_coord_tensor, colors, None
+
+    if extrinsics == None:
+        extrinsics = torch.tensor([[1, 0, 0, 0],
+                               [0, 1, 0, 0],
+                               [0, 0, 1, 0],
+                               [0, 0, 0, 1]]).float().cuda()
+    if intrinsics == None:
+        intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
+                               [0.0000, 256.0*1.0, 256.0000],
+                               [0.0000, 0.000, 1.0000]]).cuda()
+
+    depth_3d = pts_cam_to_world(points_camera_coord_tensor, extrinsics)
+    return depth_3d, colors, extrinsics, all_cam2world, intrinsics, None, None
+
+def img_to_pts_3d_metric(color_image, all_cam2world, extrinsics=None, intrinsics=None, tmp_dir=None):
+    global da_model
+    if da_model is None:
+        da_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_small', pretrain=True).cuda()
+    original_width, original_height = 512, 512
+    color_image = color_image[0]
+
+    color_image = Image.fromarray(color_image.cpu().numpy())
+    image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
+    #color_image = einops.rearrange(color_image, 'h w c -> 1 c h w').float().cuda()
+    pred_depth, confidence, output_dict = da_model.inference({'input': image_tensor})
+    pred_normal = output_dict['prediction_normal'][:, :3, :, :] # only available for Metric3Dv2 i.e., ViT models
+    normal_confidence = output_dict['prediction_normal'][:, 3, :, :] # see https://arxiv.org/abs/2109.09881 for details
+    pred = pred_depth.squeeze().detach().cpu().numpy()
+
+    # Resize color image and depth to final size
+    resized_color_image = color_image.resize((original_width, original_height), Image.LANCZOS)
+    resized_pred = Image.fromarray(pred).resize((original_width, original_height), Image.NEAREST)
+
+    focal_length_x, focal_length_y = (256.0, 256.0)
+    x, y = np.meshgrid(np.arange(original_width), np.arange(original_height))
+    x = (x - original_width / 2.0) / focal_length_x
+    y = (y - original_height / 2.0) / focal_length_y
+    z = np.array(resized_pred)
+
+    # Compute 3D points in camera coordinates
+    points_camera_coord = np.stack((np.multiply(x, z), np.multiply(y, z), z), axis=-1).reshape(-1, 3) * 50.0
+    points_camera_coord_tensor = torch.tensor(points_camera_coord, dtype=torch.float32, device='cuda')
+
+    colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
+    colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
+
+    if extrinsics == None:
+        extrinsics = torch.tensor([[1, 0, 0, 0],
+                               [0, 1, 0, 0],
+                               [0, 0, 1, 0],
+                               [0, 0, 0, 1]]).float().cuda()
+    if intrinsics == None:
+        intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
+                               [0.0000, 256.0*1.0, 256.0000],
+                               [0.0000, 0.000, 1.0000]]).cuda()
+
+    depth_3d = pts_cam_to_world(points_camera_coord_tensor, extrinsics)
+    return depth_3d, colors, extrinsics, all_cam2world, intrinsics, None, None
 
 if __name__ == '__main__':
     image_path = "./depth_anything/metric_depth/my_test/input/demo11.png"

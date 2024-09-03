@@ -35,7 +35,7 @@ def move_camera(extrinsics, direction, amount):
         extrinsics[:3, 3] += torch.tensor([amount, 0, 0], device=extrinsics.device).float()
     elif direction in ['i', 'k']:
         # Rotation angle (in radians). Positive for 'e' (down), negative for 'q' (up)
-        angle = torch.tensor(-amount if direction == 'i' else amount)
+        angle = torch.tensor(-amount if direction == 'i' else amount) / 100.0
         # Rotation matrix around the X-axis (assuming X is forward/backward)
         rotation_matrix = torch.tensor([
             [1, 0, 0, 0],
@@ -47,7 +47,7 @@ def move_camera(extrinsics, direction, amount):
         extrinsics = torch.matmul(rotation_matrix, extrinsics)
     elif direction in ['j', 'l']:
         # Rotation angle (in radians). Positive for 'd' (right), negative for 'a' (left)
-        angle = torch.tensor(-amount if direction == 'l' else amount)
+        angle = torch.tensor(-amount if direction == 'l' else amount) / 100.0
         # Rotation matrix around the Y-axis (assuming Y is up)
         rotation_matrix = torch.tensor([
             [torch.cos(angle), 0, torch.sin(angle), 0],

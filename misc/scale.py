@@ -31,7 +31,7 @@ def median_scene_distance(point_cloud, camera_extrinsics):
     camera_position = -torch.matmul(rotation_matrix.transpose(0, 1), translation_vector)
 
     distances = torch.norm(point_cloud - camera_position, dim=1)
-    return distances.median().item()  # Convert to Python float for general use
+    return distances.median().item() # Convert to Python float for general use 
 
 def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     """

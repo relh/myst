@@ -35,20 +35,25 @@ from misc.prune import density_pruning_py3d
 from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
 from misc.text import generate_prompt
-from misc.three_d import img_to_pts_3d_da, img_to_pts_3d_dust
+from misc.three_d import img_to_pts_3d_da, img_to_pts_3d_dust, img_to_pts_3d_metric
 
 
 def main(args, meta_idx, tmp_dir=None):
     # --- setup rerun args ---
     rr.script_setup(args, f"{meta_idx}myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
-    img_to_pts_3d = img_to_pts_3d_da if args.depth == 'da' else img_to_pts_3d_dust
+    if args.depth == 'da': img_to_pts_3d = img_to_pts_3d_da
+    if args.depth == 'dust': img_to_pts_3d = img_to_pts_3d_dust
+    if args.depth == 'metric': img_to_pts_3d = img_to_pts_3d_metric
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
+    all_cam2world = []
     sequence = []
     cameras = None
     pts_3d = None
     image = None
+    world2cam = None
+    intrinsics = None
     size = 512
     idx = 0
     while True:
@@ -71,8 +76,8 @@ def main(args, meta_idx, tmp_dir=None):
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, tmp_dir=tmp_dir)
-            scale = median_scene_distance(pts_3d, world2cam) / 30.0
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, extrinsics=world2cam, intrinsics=intrinsics, tmp_dir=tmp_dir)
+            scale = 10.0 #median_scene_distance(pts_3d, world2cam)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
         # --- establish camera parameters ---
@@ -157,8 +162,8 @@ def main(args, meta_idx, tmp_dir=None):
             all_cam2world.append(torch.linalg.inv(world2cam))
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, intrinsics, dm, conf, tmp_dir=tmp_dir)
-            scale = median_scene_distance(pts_3d, world2cam) / 30.0
+            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, extrinsics=world2cam, intrinsics=intrinsics, tmp_dir=tmp_dir)
+            scale = 10.0 #median_scene_distance(pts_3d, world2cam)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
         idx += 1
     rr.script_teardown(args)
@@ -184,7 +189,7 @@ if __name__ == "__main__":
     # 6. in paint black with diffusion
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
-    parser.add_argument('--depth', type=str, default='dust', help='da / dust')
+    parser.add_argument('--depth', type=str, default='metric', help='metric / da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
     parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')
