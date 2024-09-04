@@ -75,7 +75,7 @@ def load_images(images, size, square_ok=True):
 
     return imgs, filelist
 
-def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
+def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
     global dust_model
     device = 'cuda'
     batch_size = 1
@@ -118,12 +118,11 @@ def img_to_pts_3d_dust(images, all_cam2world=None, intrinsics=None, dm=None, con
     return pts_3d.reshape(-1, 3),\
            rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
            world2cam,\
-           all_cam2world,\
            intrinsics,\
            depth_maps,\
            conf.reshape(-1, 1)
 
-def img_to_pts_3d_da(color_image, all_cam2world, extrinsics=None, intrinsics=None, tmp_dir=None):
+def img_to_pts_3d_da(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
     global da_model
     if da_model is None:
         config = get_config('zoedepth', "eval", 'nyu')
@@ -132,7 +131,7 @@ def img_to_pts_3d_da(color_image, all_cam2world, extrinsics=None, intrinsics=Non
         da_model.eval()
     original_width, original_height = 512, 512
     #color_image = Image.open(image_path).convert('RGB')
-    color_image = color_image[0]
+    color_image = color_image[-1]
     #original_width, original_height = color_image.size()
     color_image = Image.fromarray(color_image.cpu().numpy())
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
@@ -161,8 +160,8 @@ def img_to_pts_3d_da(color_image, all_cam2world, extrinsics=None, intrinsics=Non
     colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
     colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
 
-    if extrinsics == None:
-        extrinsics = torch.tensor([[1, 0, 0, 0],
+    if world2cam == None:
+        world2cam = torch.tensor([[1, 0, 0, 0],
                                [0, 1, 0, 0],
                                [0, 0, 1, 0],
                                [0, 0, 0, 1]]).float().cuda()
@@ -171,15 +170,15 @@ def img_to_pts_3d_da(color_image, all_cam2world, extrinsics=None, intrinsics=Non
                                [0.0000, 256.0*1.0, 256.0000],
                                [0.0000, 0.000, 1.0000]]).cuda()
 
-    depth_3d = pts_cam_to_world(points_camera_coord_tensor, extrinsics)
-    return depth_3d, colors, extrinsics, all_cam2world, intrinsics, None, None
+    depth_3d = pts_cam_to_world(points_camera_coord_tensor, world2cam)
+    return depth_3d, colors, world2cam, intrinsics, None, None
 
-def img_to_pts_3d_metric(color_image, all_cam2world, extrinsics=None, intrinsics=None, tmp_dir=None):
+def img_to_pts_3d_metric(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
     global da_model
     if da_model is None:
         da_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_small', pretrain=True).cuda()
     original_width, original_height = 512, 512
-    color_image = color_image[0]
+    color_image = color_image[-1]
 
     color_image = Image.fromarray(color_image.cpu().numpy())
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
@@ -206,8 +205,8 @@ def img_to_pts_3d_metric(color_image, all_cam2world, extrinsics=None, intrinsics
     colors = np.array(resized_color_image).reshape(-1, 3) / 255.0
     colors = (torch.tensor(colors) * 255.0).float().to('cuda').to(torch.uint8)
 
-    if extrinsics == None:
-        extrinsics = torch.tensor([[1, 0, 0, 0],
+    if world2cam == None:
+        world2cam = torch.tensor([[1, 0, 0, 0],
                                [0, 1, 0, 0],
                                [0, 0, 1, 0],
                                [0, 0, 0, 1]]).float().cuda()
@@ -216,8 +215,8 @@ def img_to_pts_3d_metric(color_image, all_cam2world, extrinsics=None, intrinsics
                                [0.0000, 256.0*1.0, 256.0000],
                                [0.0000, 0.000, 1.0000]]).cuda()
 
-    depth_3d = pts_cam_to_world(points_camera_coord_tensor, extrinsics)
-    return depth_3d, colors, extrinsics, all_cam2world, intrinsics, None, None
+    depth_3d = pts_cam_to_world(points_camera_coord_tensor, world2cam)
+    return depth_3d, colors, world2cam, intrinsics, None, None
 
 if __name__ == '__main__':
     image_path = "./depth_anything/metric_depth/my_test/input/demo11.png"

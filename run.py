@@ -30,12 +30,14 @@ from misc.camera import (move_camera, pts_3d_to_img_py3d, pts_3d_to_img_raster,
 from misc.control import generate_control
 from misc.imutils import fill, resize_and_pad, select_bounding_box
 from misc.inpaint import run_inpaint
+from misc.merge import merge_and_filter
 from misc.perceptual import *
 from misc.prune import density_pruning_py3d
 from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
 from misc.text import generate_prompt
-from misc.three_d import img_to_pts_3d_da, img_to_pts_3d_dust, img_to_pts_3d_metric
+from misc.three_d import (img_to_pts_3d_da, img_to_pts_3d_dust,
+                          img_to_pts_3d_metric)
 
 
 def main(args, meta_idx, tmp_dir=None):
@@ -47,13 +49,14 @@ def main(args, meta_idx, tmp_dir=None):
     if args.depth == 'metric': img_to_pts_3d = img_to_pts_3d_metric
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
-    all_cam2world = []
     sequence = []
     cameras = None
     pts_3d = None
     image = None
     world2cam = None
-    intrinsics = None
+    intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
+                           [0.0000, 256.0*1.0, 256.0000],
+                           [0.0000, 0.000, 1.0000]]).cuda()
     size = 512
     idx = 0
     while True:
@@ -76,8 +79,7 @@ def main(args, meta_idx, tmp_dir=None):
 
         # --- estimate depth ---
         if pts_3d is None: 
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, extrinsics=world2cam, intrinsics=intrinsics, tmp_dir=tmp_dir)
-            scale = 10.0 #median_scene_distance(pts_3d, world2cam)
+            pts_3d, rgb_3d, world2cam, intrinsics, dm, conf = img_to_pts_3d(all_images, world2cam, intrinsics, tmp_dir=tmp_dir)
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
         # --- establish camera parameters ---
@@ -147,31 +149,20 @@ def main(args, meta_idx, tmp_dir=None):
             gen_image = gen_image.to(torch.uint8)
             #gen_image = run_supersample(gen_image, mask, prompt)
 
-            '''
-            # use LPIPS to ditch ugly
-            score_map, unrealistic_mask = evaluate_image_patches(all_images[0], gen_image)
-            urm = unrealistic_mask.reshape(8, 8).T
-            urm = einops.repeat(urm, 'h w -> 1 3 h w')
-            urm = F.interpolate(urm.float(), (512, 512))
-            urm = einops.rearrange(urm.bool(), 'b c h w -> h w (b c)')
-            gen_image[urm] = 0
-            '''
-
             # --- add to duster list ---
             all_images.append(gen_image.detach())
-            all_cam2world.append(torch.linalg.inv(world2cam))
 
             # --- lift img to 3d ---
-            pts_3d, rgb_3d, world2cam, all_cam2world, intrinsics, dm, conf = img_to_pts_3d(all_images, all_cam2world, extrinsics=world2cam, intrinsics=intrinsics, tmp_dir=tmp_dir)
-            scale = 10.0 #median_scene_distance(pts_3d, world2cam)
-            pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
+            new_pts_3d, new_rgb_3d, world2cam, intrinsics, dm, conf = img_to_pts_3d(all_images, world2cam, intrinsics, tmp_dir=tmp_dir)
+            new_pts_3d, new_rgb_3d = density_pruning_py3d(new_pts_3d, new_rgb_3d)
+            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)  
         idx += 1
     rr.script_teardown(args)
 
     if args.control != 'me':
         data = {'meta_idx': meta_idx,\
                 'prompt': orig_prompt,\
-                'sequence': sequence}#, 'images': all_images, 'cam2world': all_cam2world, 'intrinsics': intrinsics}
+                'sequence': sequence}
 
         start = Image.fromarray(all_images[0].cpu().numpy())
         end = Image.fromarray(all_images[-1].cpu().numpy())
