@@ -137,7 +137,7 @@ def main(args, meta_idx, tmp_dir=None):
 
         # --- turn 3d points to image ---
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale, bbox=(tl, br))
-        gen_image = fill(gen_image) # blur points to make a smooth image
+        #gen_image = fill(gen_image) # blur points to make a smooth image
         mask = ((gen_image == -255).sum(dim=2) == 3) | ((gen_image == 0).sum(dim=2) == 3)
 
         if inpaint: 

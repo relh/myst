@@ -18,20 +18,20 @@ from scipy.spatial.transform import Rotation as R
 torch.backends.cuda.preferred_linalg_library()
 
 
-def fill(tensor, null_value=-255):
+def fill(tensor, null_value=-255, kernel_size=3):
     tensor = rearrange(tensor.float().cuda(), 'h w c -> 1 c h w')
 
     mask = (tensor != null_value).float()
     
     # Define the convolution kernel for the three-channel input
-    kernel = torch.ones((3, 1, 5, 5), device=tensor.device)
+    kernel = torch.ones((3, 1, kernel_size, kernel_size), device=tensor.device)
 
     # Convolve to find the number of non-null neighbors per channel
-    non_null_count = F.conv2d(mask, kernel, padding=2, groups=3)#, padding_mode='reflect')
+    non_null_count = F.conv2d(mask, kernel, padding=(kernel_size // 2), groups=3)#, padding_mode='reflect')
 
     # Set null values to zero for valid computation
     tensor = torch.where(tensor == null_value, torch.zeros_like(tensor), tensor)
-    summed_values = F.conv2d(tensor, kernel, padding=2, groups=3)#, padding_mode='reflect')
+    summed_values = F.conv2d(tensor, kernel, padding=(kernel_size // 2), groups=3)#, padding_mode='reflect')
 
     # Compute averages, avoiding division by zero
     averages = summed_values / non_null_count.clamp(min=1)
