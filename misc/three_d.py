@@ -229,6 +229,8 @@ def img_to_pts_3d_metric(color_image, world2cam=None, intrinsics=None, tmp_dir=N
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
     #color_image = einops.rearrange(color_image, 'h w c -> 1 c h w').float().cuda()
     pred_depth, confidence, output_dict = metric_model.inference({'input': image_tensor, 'intrinsics': metric_intrinsics})
+
+    # TODO use these
     pred_normal = output_dict['prediction_normal'][:, :3, :, :] # only available for Metric3Dv2 i.e., ViT models
     normal_confidence = output_dict['prediction_normal'][:, 3, :, :] # see https://arxiv.org/abs/2109.09881 for details
     pred = pred_depth.squeeze().detach().cpu().numpy()
