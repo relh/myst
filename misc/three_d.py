@@ -14,6 +14,7 @@ import math
 import os
 import tempfile
 
+import cv2
 import einops
 import gradio
 import matplotlib.pyplot as pl
@@ -46,8 +47,10 @@ from misc.camera import pts_cam_to_world
 from misc.supersample import supersample_point_cloud
 
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+metric_model = None
 da_model = None
 dust_model = None
+intr_model = None
 
 def _resize_pil_image(img, long_edge_size):
     S = max(img.size)
@@ -123,12 +126,14 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
            conf.reshape(-1, 1)
 
 def img_to_pts_3d_da(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
-    global da_model
+    global da_model, intr_model
     if da_model is None:
         config = get_config('zoedepth', "eval", 'nyu')
         config.pretrained_resource = 'local::./checkpoints/depth_anything_metric_depth_indoor.pt'
         da_model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
         da_model.eval()
+    if intr_model is None:
+        intr_model = torch.hub.load('ShngJZ/WildCamera', "WildCamera", pretrained=True).cuda()
     original_width, original_height = 512, 512
     #color_image = Image.open(image_path).convert('RGB')
     color_image = color_image[-1]
@@ -173,17 +178,58 @@ def img_to_pts_3d_da(color_image, world2cam=None, intrinsics=None, tmp_dir=None)
     depth_3d = pts_cam_to_world(points_camera_coord_tensor, world2cam)
     return depth_3d, colors, world2cam, intrinsics, None, None
 
-def img_to_pts_3d_metric(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
-    global da_model
-    if da_model is None:
-        da_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_small', pretrain=True).cuda()
-    original_width, original_height = 512, 512
-    color_image = color_image[-1]
+def calculate_intrinsic_matrix(preds, image_width, image_height):
+    vfov_rad = preds['pred_vfov'].item() * (math.pi / 180)  # Convert degrees to radians
+    
+    # Compute focal length from vFOV
+    focal_length_vfov = image_height / (2 * torch.tan(torch.tensor(vfov_rad) / 2))
 
-    color_image = Image.fromarray(color_image.cpu().numpy())
+    # Use pred_rel_focal to compute focal length
+    focal_length_rel = preds['pred_rel_focal'].item() * image_height
+
+    # Check for consistency between vFOV-derived and pred_rel_focal-derived focal lengths
+    #if not torch.isclose(focal_length_vfov, torch.tensor(focal_length_rel), atol=1e-3):
+    #    print(f"Warning: Focal lengths differ. vFOV-derived: {focal_length_vfov}, rel_focal-derived: {focal_length_rel}")
+
+    # Using the vFOV-derived focal length for intrinsic matrix to ensure consistency with previous calculations
+    # or switch to `focal_length_rel` if it proves to be more accurate in your application context.
+    focal_length = focal_length_rel  # or focal_length_rel
+
+    # Principal point assumed at the center
+    cx = image_width / 2
+    cy = image_height / 2
+    
+    # Create the intrinsic matrix
+    K = torch.tensor([
+        [focal_length, 0, cx],
+        [0, focal_length, cy],
+        [0, 0, 1]
+    ], dtype=torch.float32, device=preds['pred_vfov'].device)  # Ensure the tensor is on the same device as the input
+
+    return K
+
+def img_to_pts_3d_metric(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
+    global metric_model, intr_model
+    if metric_model is None:
+        metric_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_large', pretrain=True).cuda()
+    if intr_model is None:
+        from perspective2d import PerspectiveFields
+
+        # specify model version
+        version = 'Paramnet-360Cities-edina-centered'
+        # load model
+        intr_model = PerspectiveFields(version).eval().cuda()
+    original_width, original_height = 512, 512
+    color_image = color_image[-1].cpu().numpy()
+    pf_image = cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR)
+    color_image = Image.fromarray(color_image)
+
+    preds = intr_model.inference(img_bgr=pf_image)
+    intrinsic = calculate_intrinsic_matrix(preds, 512, 512)
+
     image_tensor = transforms.ToTensor()(color_image).unsqueeze(0).to('cuda' if torch.cuda.is_available() else 'cpu')
     #color_image = einops.rearrange(color_image, 'h w c -> 1 c h w').float().cuda()
-    pred_depth, confidence, output_dict = da_model.inference({'input': image_tensor})
+    pred_depth, confidence, output_dict = metric_model.inference({'input': image_tensor, 'intrinsics': intrinsic})
     pred_normal = output_dict['prediction_normal'][:, :3, :, :] # only available for Metric3Dv2 i.e., ViT models
     normal_confidence = output_dict['prediction_normal'][:, 3, :, :] # see https://arxiv.org/abs/2109.09881 for details
     pred = pred_depth.squeeze().detach().cpu().numpy()

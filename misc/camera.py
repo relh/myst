@@ -170,7 +170,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
         radius=radius,
-        points_per_pixel=2,
+        points_per_pixel=1,
     )
     
     renderer = PointsRenderer(

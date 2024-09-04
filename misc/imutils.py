@@ -27,17 +27,14 @@ def fill(tensor, null_value=-255):
     kernel = torch.ones((3, 1, 5, 5), device=tensor.device)
 
     # Convolve to find the number of non-null neighbors per channel
-    non_null_count = F.conv2d(mask, kernel, padding=2, groups=3)
+    non_null_count = F.conv2d(mask, kernel, padding=2, groups=3)#, padding_mode='reflect')
 
     # Set null values to zero for valid computation
     tensor = torch.where(tensor == null_value, torch.zeros_like(tensor), tensor)
-    summed_values = F.conv2d(tensor, kernel, padding=2, groups=3)
+    summed_values = F.conv2d(tensor, kernel, padding=2, groups=3)#, padding_mode='reflect')
 
     # Compute averages, avoiding division by zero
     averages = summed_values / non_null_count.clamp(min=1)
-
-    # Apply mask to remove originally null contributions
-    averages *= mask
 
     # Only update null positions
     updated_tensor = torch.where(tensor == 0, averages, tensor)
