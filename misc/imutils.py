@@ -17,36 +17,39 @@ from scipy.spatial.transform import Rotation as R
 #torch.set_default_device('cuda')
 torch.backends.cuda.preferred_linalg_library()
 
-def fill(tensor):
-    tensor = tensor.to(torch.float32)
 
-    # Mask of zeros in all channels
-    zero_mask = (tensor == 0).all(dim=-1)
+def fill(tensor, null_value=-255):
+    tensor = rearrange(tensor.float().cuda(), 'h w c -> 1 c h w')
 
-    # Preparing the tensor for convolution
-    tensor_expanded = tensor.permute(2, 0, 1).unsqueeze(0)  # Shape [1, 3, 256, 456]
+    mask = (tensor != null_value).float()
+    
+    # Define the convolution kernel for the three-channel input
+    kernel = torch.ones((3, 1, 5, 5), device=tensor.device)
 
-    # Define the convolution kernel
-    kernel = torch.ones((3, 3), dtype=torch.float32).to(tensor.device)
-    kernel[1, 1] = 0  # Excluding the center pixel from averaging
-    kernel = kernel.unsqueeze(0).unsqueeze(0)  # Shape [1, 1, 3, 3]
-    kernel = kernel.repeat(3, 1, 1, 1)  # Adjust kernel for 3 channels, shape [3, 1, 3, 3]
+    # Convolve to find the number of non-null neighbors per channel
+    non_null_count = F.conv2d(mask, kernel, padding=2, groups=3)
 
-    # Applying padding
-    padded_tensor = F.pad(tensor_expanded, (1, 1, 1, 1), mode='reflect')
+    # Set null values to zero for valid computation
+    tensor = torch.where(tensor == null_value, torch.zeros_like(tensor), tensor)
+    summed_values = F.conv2d(tensor, kernel, padding=2, groups=3)
 
-    # Convolution operations to sum and count neighbors
-    sum_neighbors = F.conv2d(padded_tensor, kernel, padding=0, groups=3)
-    non_zero_mask = (padded_tensor != 0).float()
-    count_nonzero_neighbors = F.conv2d(non_zero_mask, kernel, padding=0, groups=3)
+    # Compute averages, avoiding division by zero
+    averages = summed_values / non_null_count.clamp(min=1)
 
-    # Calculate the averages
-    average_values = sum_neighbors / count_nonzero_neighbors.clamp(min=1)
-    average_values = average_values.squeeze(0).permute(1, 2, 0)  # Back to original shape [256, 456, 3]
+    # Apply mask to remove originally null contributions
+    averages *= mask
 
-    # Apply the averages to zero values
-    tensor[zero_mask] = average_values.to(torch.float32)[zero_mask]
-    return tensor#.to(torch.uint8)
+    # Only update null positions
+    updated_tensor = torch.where(tensor == 0, averages, tensor)
+
+    # Remove batch dimension and crop out padding, and restore original shape
+    updated_tensor = rearrange(updated_tensor[0], 'c h w -> h w c')
+
+    # Reset original null positions back to null value
+    updated_tensor = torch.where(updated_tensor == 0,\
+                                 torch.full_like(updated_tensor, null_value), updated_tensor)
+    return updated_tensor
+
 
 def ransac_alignment(estimated_dense_disparity, colmap_depth, ransac_iters=2096):
     disparity_max = 10000

@@ -80,6 +80,7 @@ def main(args, meta_idx, tmp_dir=None):
         # --- estimate depth ---
         if pts_3d is None: 
             pts_3d, rgb_3d, world2cam, intrinsics, dm, conf = img_to_pts_3d(all_images, world2cam, intrinsics, tmp_dir=tmp_dir)
+            scale = median_scene_distance(pts_3d, world2cam) / 10
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
         # --- establish camera parameters ---
@@ -138,7 +139,7 @@ def main(args, meta_idx, tmp_dir=None):
         gen_image = pts_3d_to_img(pts_3d, rgb_3d, intrinsics, world2cam, (size, size), cameras, scale, bbox=(tl, br))
 
         #if args.renderer == 'raster':
-        #    gen_image = fill(gen_image) # blur points to make a smooth image
+        gen_image = fill(gen_image) # blur points to make a smooth image
         mask = ((gen_image == -255).sum(dim=2) == 3) | ((gen_image == 0).sum(dim=2) == 3)
 
         if inpaint: 
@@ -154,6 +155,7 @@ def main(args, meta_idx, tmp_dir=None):
 
             # --- lift img to 3d ---
             new_pts_3d, new_rgb_3d, world2cam, intrinsics, dm, conf = img_to_pts_3d(all_images, world2cam, intrinsics, tmp_dir=tmp_dir)
+            scale = median_scene_distance(new_pts_3d, world2cam) / 10.0
             new_pts_3d, new_rgb_3d = density_pruning_py3d(new_pts_3d, new_rgb_3d)
             pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)  
         idx += 1

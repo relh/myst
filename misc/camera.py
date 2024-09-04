@@ -147,7 +147,7 @@ def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape,
 
     return image_t.clone().float()
 
-def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale, bbox=None):
+def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale=None, bbox=None):
     from misc.scale import median_scene_distance
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 
@@ -159,9 +159,9 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     this_scale = median_scene_distance(points_3d, extrinsics) / 10.0
     radius = 1 / ((image_shape[0] * 0.5) * ((this_scale / scale) ** 2.0) + 1e-5)
     radius = max(radius, 1 / (image_shape[0] * 0.5))
-    #print(f'radius: {radius}')
-    #print(f'scale: {scale}')
-    #print(f'current scale: {this_scale}')
+    print(f'radius: {radius}')
+    print(f'scale: {scale}')
+    print(f'current scale: {this_scale}')
 
     points_3d = pts_world_to_cam(points_3d, extrinsics)
     points_3d = pts_cam_to_pytorch3d(points_3d)
@@ -170,7 +170,7 @@ def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, c
     raster_settings = PointsRasterizationSettings(
         image_size=image_shape[:2], 
         radius=radius,
-        points_per_pixel=1,
+        points_per_pixel=2,
     )
     
     renderer = PointsRenderer(
