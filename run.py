@@ -54,9 +54,11 @@ def main(args, meta_idx, tmp_dir=None):
     pts_3d = None
     image = None
     world2cam = None
-    intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
-                           [0.0000, 256.0*1.0, 256.0000],
-                           [0.0000, 0.000, 1.0000]]).cuda()
+    intrinsics = None
+    if args.intrinsics == 'dummy':
+        intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
+                               [0.0000, 256.0*1.0, 256.0000],
+                               [0.0000, 0.000, 1.0000]]).cuda()
     size = 512
     idx = 0
     while True:
@@ -184,6 +186,7 @@ if __name__ == "__main__":
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
     parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')
+    parser.add_argument('--intrinsics', type=str, default='dummy', help='dummy / pf')
     parser.add_argument('--image', type=str, default='gen', help='gen / path')
     parser.add_argument('--model', type=str, default='sd2', help='sd2 / if')
     args = parser.parse_args()
