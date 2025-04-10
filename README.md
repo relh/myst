@@ -116,9 +116,11 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
 </table>
 
 ## Install
+
+Now PyTorch doesn't use Conda so this won't work. You will probably need to setup some more things to run this, just let me know if you need help. :) 
+
 `mamba install -y pytorch torchvision torchaudio pytorch-cuda=12.1 diffusers xformers pytorch3d -c pytorch -c nvidia -c pytorch3d -c conda-forge`
 
 ## Run
 `python run.py`
 
-You will probably need to setup some more things to run this, just let me know if you need help. :) 
