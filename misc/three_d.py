@@ -210,8 +210,8 @@ def calculate_intrinsic_matrix(preds, image_width, image_height):
 def img_to_pts_3d_metric(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
     global metric_model, intr_model
     if metric_model is None:
-        #metric_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_giant2', pretrain=True).cuda()
-        metric_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_large', pretrain=True).cuda()
+        metric_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_giant2', pretrain=True).cuda()
+        #metric_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_large', pretrain=True).cuda()
     if intr_model is None and intrinsics is None:
         from perspective2d import PerspectiveFields
         version = 'Paramnet-360Cities-edina-centered'

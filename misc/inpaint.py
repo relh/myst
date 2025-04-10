@@ -17,9 +17,6 @@ from PIL import Image
 from torchvision.transforms.functional import pad
 from transformers import T5EncoderModel
 
-#torch.set_default_dtype(torch.float32)
-#torch.set_default_device('cuda')
-
 # Global variable for the pipeline
 pipeline = None
 
@@ -66,8 +63,6 @@ def run_inpaint(image, mask_image, prompt, model, guidance_scale=12.0):
     global pipeline
     if pipeline is None:
         initialize_pipeline(model)
-        #seed = 12887
-        #seed = 78631 
         seed = random.randint(0, 99999)
     else:
         seed = random.randint(0, 99999)
