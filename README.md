@@ -1,12 +1,21 @@
 # myst
 
-**Caption:** *A real-time recording of me creating a kitchen scene using Stable Diffusion and Dust3r.*
+Myst is a combination of Stable Diffusion and Mast3r/Dust3r/DepthAnything to create worlds that are 3D aware and go beyond outpainting. 
 
-![Demo Video](./img/demo.gif)
+We can create infinite 3D scenes, for use as a potential dataset. We can manually create these worlds, or do it automatically.
+
+**Automatic Dataset:** *Showing a few automatic datasets.*
+
+![Automatic Dataset](./img/automatic_dataset.png)
 
 **Architecture:** *Showing how we created these worlds.*
 
 ![Architecture](./img/architecture.png)
+
+**Real-time Generation:** *A real-time recording of me creating a kitchen scene using Stable Diffusion and Dust3r.*
+
+![Demo Video](./img/demo.gif)
+
 ---
 
 ## A Few Scenes 
@@ -70,14 +79,6 @@
 </table>
 
 ## Synthetic Dataset 
-
-Myst is a combination of Stable Diffusion and Dust3r/DepthAnything to create 3D worlds that are 3D aware and go beyond outpainting. 
-
-We can create infinite 3D scenes, for use as a potential dataset. Besides manually creating these worlds, we can also do it automatically.
-
-**Automatic Dataset:** *Showing a few automatic datasets.*
-
-![Automatic Dataset](./img/automatic_dataset.png)
 
 <table>
   <tr>
