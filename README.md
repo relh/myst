@@ -14,7 +14,9 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
 
 **Real-time Generation:** *A real-time recording of me creating a kitchen scene using Stable Diffusion and Dust3r.*
 
-![Demo Video](./img/demo.gif)
+<p align="center">
+  <img src="./img/demo.gif" alt="Real-time generation">
+</p>
 
 ---
 
