@@ -121,13 +121,13 @@ def main(args, meta_idx, tmp_dir=None):
             #prompt = ''
         elif user_input.lower() == 'u':
             print(f"{user_input} --> upsample...")
-            breakpoint()
+            # TODO: Implement upsampling
         elif user_input.lower() == 'e':
             print(f"{user_input} --> end...")
             break
         elif user_input.lower() == 'b':
             print(f"{user_input} --> breakpoint...")
-            breakpoint()
+            # Debug breakpoint - remove in production
         elif user_input.lower() == 'c':
             print(f"{user_input} --> change region...")
             tl, br = select_bounding_box(see(image))

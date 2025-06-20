@@ -36,14 +36,15 @@ def fill(tensor, null_value=-255, kernel_size=3):
     # Compute averages, avoiding division by zero
     averages = summed_values / non_null_count.clamp(min=1)
 
-    # Only update null positions
-    updated_tensor = torch.where(tensor == 0, averages, tensor)
+    # Only update null positions (where we set them to zero earlier)
+    is_null = (mask == 0)
+    updated_tensor = torch.where(is_null, averages, tensor)
 
     # Remove batch dimension and crop out padding, and restore original shape
     updated_tensor = rearrange(updated_tensor[0], 'c h w -> h w c')
 
-    # Reset original null positions back to null value
-    updated_tensor = torch.where(updated_tensor == 0,\
+    # Reset any remaining zero values that should be null back to null value
+    updated_tensor = torch.where((updated_tensor == 0) & rearrange(is_null[0], 'c h w -> h w c'),\
                                  torch.full_like(updated_tensor, null_value), updated_tensor)
     return updated_tensor
 

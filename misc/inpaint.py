@@ -103,10 +103,11 @@ def run_inpaint(image, mask_image, prompt, model, guidance_scale=12.0):
 
 # Example usage
 if __name__ == "__main__":
+    # Example code - needs create_outpainting_image_and_mask implementation
     prompt = "A girl sitting in a library full of books"
-    input_url = "https://www.mauritshuis.nl/media/wlola5to/0670_repro_2.jpg?center=0.42060129980199951,0.47243107769423559&mode=crop&width=480&rnd=133443375703200000&quality=70"
-    init_image = Image.open(PIL.Requests.get(input_url, stream=True).raw).resize((512, 512))
-    conditioning_image, outpaint_mask = create_outpainting_image_and_mask(init_image, 0.5)
-
-    output_image = run_inpainting_pipeline(conditioning_image, outpaint_mask, prompt)
-    output_image.show()  # Or save it with output_image.save('output_path.jpg')
+    # input_url = "https://www.mauritshuis.nl/media/wlola5to/0670_repro_2.jpg?center=0.42060129980199951,0.47243107769423559&mode=crop&width=480&rnd=133443375703200000&quality=70"
+    # init_image = Image.open(requests.get(input_url, stream=True).raw).resize((512, 512))
+    # conditioning_image, outpaint_mask = create_outpainting_image_and_mask(init_image, 0.5)
+    
+    # output_image = run_inpainting_pipeline(conditioning_image, outpaint_mask, prompt)
+    # output_image.show()  # Or save it with output_image.save('output_path.jpg')

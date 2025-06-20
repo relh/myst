@@ -50,7 +50,8 @@ def fit_least_squares_shift_scale_with_mask(pc1, pc2, mask1, mask2):
     # Compute scale factors along each dimension
     std1 = torch.std(sub_pc1, dim=0, unbiased=False)
     std2 = torch.std(sub_pc2, dim=0, unbiased=False)
-    scale_factors = std1 / std2
+    # Avoid division by zero
+    scale_factors = std1 / (std2 + 1e-8)
 
     # Scale the corresponding part of the second point cloud
     scaled_pc2 = (sub_pc2 - centroid2) * scale_factors + centroid2
@@ -157,7 +158,7 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     print(f'Number of matching colors within threshold: {matches_count}')
 
     if matches_count == 0: 
-        breakpoint()
+        print("Warning: No matching colors found within threshold")
         return 1.0, new_points_3d, within_threshold
 
     gt_image = torch.full((512, 512, 3), -1, dtype=torch.float32, device='cuda:0')
@@ -167,7 +168,7 @@ def project_and_scale_points(gt_points_3d, new_points_3d, gt_colors, new_colors,
     new_image[new_proj[:, 0], new_proj[:, 1]] = select_new_3d
 
     vis_images(gt_c_image, new_c_image)
-    breakpoint()
+    # TODO: Remove debug visualization in production
 
     # TODO this is broken because the intrinsics are wrong so the "corresponding" points 
     # are no longer "corresponding"
