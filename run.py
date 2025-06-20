@@ -37,7 +37,7 @@ from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
 from misc.text import generate_prompt
 from misc.three_d import (img_to_pts_3d_da, img_to_pts_3d_dust,
-                          img_to_pts_3d_metric)
+                          img_to_pts_3d_metric, img_to_pts_3d_vggt)
 
 
 def main(args, meta_idx, tmp_dir=None):
@@ -47,6 +47,7 @@ def main(args, meta_idx, tmp_dir=None):
     if args.depth == 'da': img_to_pts_3d = img_to_pts_3d_da
     if args.depth == 'dust': img_to_pts_3d = img_to_pts_3d_dust
     if args.depth == 'metric': img_to_pts_3d = img_to_pts_3d_metric
+    if args.depth == 'vggt': img_to_pts_3d = img_to_pts_3d_vggt
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
     sequence = []
@@ -176,13 +177,13 @@ if __name__ == "__main__":
     # --- procedure ---
     # 1. load an input image
     # 2. estimate depth
-    # 3. use dust3r to lift to 3D point cloud 
+    # 3. use VGGT/other methods to lift to 3D point cloud 
     # 4. move around and apply delta extrinsics
     # 5. re-render new image with mask
     # 6. in paint black with diffusion
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
-    parser.add_argument('--depth', type=str, default='metric', help='metric / da / dust')
+    parser.add_argument('--depth', type=str, default='vggt', help='vggt / metric / da / dust')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
     parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')

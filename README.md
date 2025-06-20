@@ -1,6 +1,14 @@
 # myst
 
-Myst is a combination of Stable Diffusion and Mast3r/Dust3r/DepthAnything to create worlds that are 3D aware and go beyond outpainting. 
+Myst is a combination of Stable Diffusion and VGGT (Visual Geometry Grounded Transformer)/DepthAnything/Metric3D to create worlds that are 3D aware and go beyond outpainting.
+
+**Update**: We've replaced Dust3r/Mast3r with [VGGT](https://github.com/facebookresearch/vggt), the CVPR 2025 Best Paper Award winner, for faster and more accurate 3D reconstruction. 
+
+### Why VGGT?
+- **Speed**: VGGT reconstructs scenes in <1 second vs tens of seconds for Dust3r/Mast3r
+- **Accuracy**: State-of-the-art performance on 3D reconstruction benchmarks
+- **Single-view**: Excellent zero-shot single-view reconstruction capabilities
+- **Memory efficient**: Better GPU memory usage, allowing for more iterations before OOM
 
 We can create infinite 3D scenes, for use as a potential dataset. We can manually create these worlds, or do it automatically.
 
@@ -117,10 +125,35 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
 
 ## Install
 
-Now PyTorch doesn't use Conda so this won't work. You will probably need to setup some more things to run this, just let me know if you need help. :) 
+### Quick Setup with VGGT
 
-`mamba install -y pytorch torchvision torchaudio pytorch-cuda=12.1 diffusers xformers pytorch3d -c pytorch -c nvidia -c pytorch3d -c conda-forge`
+1. Create a conda environment:
+```bash
+mamba create -n myst python=3.10
+mamba activate myst
+```
+
+2. Install VGGT and dependencies:
+```bash
+bash scripts/vggt_setup.sh
+```
+
+3. Install other dependencies:
+```bash
+mamba install -y pytorch torchvision torchaudio pytorch-cuda=12.1 diffusers xformers pytorch3d -c pytorch -c nvidia -c pytorch3d -c conda-forge
+pip install -r requirements.txt
+```
 
 ## Run
-`python run.py`
+
+Default mode now uses VGGT for 3D reconstruction:
+```bash
+python run.py --depth vggt
+```
+
+You can also use other depth estimation methods:
+- `--depth vggt` (default): VGGT - fastest and most accurate
+- `--depth metric`: Metric3D
+- `--depth da`: Depth Anything
+- `--depth dust`: Dust3r/Mast3r (requires uncommenting imports in misc/three_d.py)
 

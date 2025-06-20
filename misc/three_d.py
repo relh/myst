@@ -4,8 +4,9 @@
 import sys
 
 sys.path.append('depth_anything/metric_depth/')
-sys.path.append('mast3r/dust3r/')
-sys.path.append('mast3r/')
+# Commenting out dust3r/mast3r paths since we're using VGGT
+# sys.path.append('mast3r/dust3r/')
+# sys.path.append('mast3r/')
 
 import argparse
 import copy
@@ -31,17 +32,18 @@ from scipy.spatial.transform import Rotation
 
 from depth_anything.metric_depth.zoedepth.models.builder import build_model
 from depth_anything.metric_depth.zoedepth.utils.config import get_config
-from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
-from dust3r.image_pairs import make_pairs
-from dust3r.inference import inference
-from dust3r.utils.image import rgb
-from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
-                        pts3d_to_trimesh)
-from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
-from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
-from mast3r.fast_nn import fast_reciprocal_NNs
-from mast3r.model import AsymmetricMASt3R
-from mast3r.utils.misc import hash_md5
+# Commenting out dust3r/mast3r imports since we're using VGGT
+# from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
+# from dust3r.image_pairs import make_pairs
+# from dust3r.inference import inference
+# from dust3r.utils.image import rgb
+# from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
+#                         pts3d_to_trimesh)
+# from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
+# from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
+# from mast3r.fast_nn import fast_reciprocal_NNs
+# from mast3r.model import AsymmetricMASt3R
+# from mast3r.utils.misc import hash_md5
 from misc.camera import pts_cam_to_world
 from misc.supersample import supersample_point_cloud
 
@@ -49,6 +51,7 @@ ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5,
 metric_model = None
 da_model = None
 dust_model = None
+vggt_model = None
 intr_model = None
 
 def _resize_pil_image(img, long_edge_size):
@@ -78,12 +81,19 @@ def load_images(images, size, square_ok=True):
     return imgs, filelist
 
 def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
+    """
+    Note: This function requires dust3r/mast3r imports which are commented out above.
+    To use this function, uncomment the dust3r/mast3r imports.
+    """
+    raise NotImplementedError("Dust3r/Mast3r support has been replaced by VGGT. To re-enable, uncomment the dust3r/mast3r imports.")
+    
     global dust_model
     device = 'cuda'
     batch_size = 1
     if dust_model is None:
         #weights_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
         weights_path = 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth'
+        from mast3r.model import AsymmetricMASt3R  # noqa
         dust_model = AsymmetricMASt3R.from_pretrained(weights_path).to('cuda')
 
     # --- whether to standalone index 0 image or not ---
@@ -92,6 +102,10 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     images, filelist = load_images(images, size=512)
 
     # --- run dust3r ---
+    # The following lines would need the dust3r/mast3r imports
+    from dust3r.image_pairs import make_pairs  # noqa
+    from mast3r.cloud_opt.sparse_ga import sparse_global_alignment  # noqa
+    
     pairs = make_pairs(images, scene_graph='complete', prefilter=None,\
                        symmetrize=True)# if num_images > 2 else True)
     #output = inference(pairs, dust_model, device, batch_size=batch_size)
@@ -123,6 +137,122 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
            intrinsics,\
            depth_maps,\
            conf.reshape(-1, 1)
+
+def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
+    global vggt_model
+    device = 'cuda'
+    dtype = torch.bfloat16
+    
+    if vggt_model is None:
+        try:
+            # Try to load VGGT model
+            from vggt.model import VGGTModel
+            vggt_model = VGGTModel.from_pretrained("facebook/vggt").to(device)
+            vggt_model.eval()
+        except ImportError:
+            print("VGGT not installed. Please install with: pip install vggt")
+            raise
+        except Exception as e:
+            print(f"Error loading VGGT model: {e}")
+            print("Trying alternative loading method...")
+            # Alternative loading method based on VGGT repo
+            import torch.hub
+            vggt_model = torch.hub.load('facebookresearch/vggt', 'vggt', trust_repo=True).to(device)
+            vggt_model.eval()
+    
+    # Convert images to the format VGGT expects
+    if isinstance(images[0], torch.Tensor):
+        # Convert tensor images to PIL
+        images_pil = [Image.fromarray(img.cpu().numpy().astype(np.uint8)) for img in images]
+    else:
+        images_pil = images
+    
+    # Prepare images tensor for VGGT (expects normalized float32/bfloat16)
+    from torchvision import transforms
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    
+    images_tensor = torch.stack([transform(img) for img in images_pil]).to(device)
+    
+    with torch.no_grad():
+        with torch.cuda.amp.autocast(dtype=dtype):
+            # Add batch dimension
+            images_batch = images_tensor[None]  # shape: (1, num_images, 3, H, W)
+            
+            # Get aggregated tokens
+            aggregated_tokens_list, ps_idx = vggt_model.aggregator(images_batch)
+            
+            # Predict cameras
+            from vggt.utils.pose_enc import pose_encoding_to_extri_intri
+            pose_enc = vggt_model.camera_head(aggregated_tokens_list)[-1]
+            extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc, images_batch.shape[-2:])
+            
+            # Predict depth maps
+            depth_map, depth_conf = vggt_model.depth_head(aggregated_tokens_list, images_batch, ps_idx)
+            
+            # Construct 3D points from depth maps
+            from vggt.utils.geometry import unproject_depth_map_to_point_map
+            
+            # We'll use the last image's camera parameters as the reference
+            last_idx = len(images) - 1
+            extrinsic_last = extrinsic.squeeze(0)[last_idx]  # Remove batch dim and get last camera
+            intrinsic_last = intrinsic.squeeze(0)[last_idx]
+            
+            # Convert from OpenCV convention (camera from world) to world from camera
+            world2cam = extrinsic_last
+            
+            # Unproject all depth maps to get 3D points
+            all_pts_3d = []
+            all_rgb_3d = []
+            
+            for i in range(len(images)):
+                # Get depth map for this image
+                depth_i = depth_map.squeeze(0)[i]  # Remove batch dimension
+                extrinsic_i = extrinsic.squeeze(0)[i]
+                intrinsic_i = intrinsic.squeeze(0)[i]
+                
+                # Unproject to get point map in world coordinates
+                point_map_i = unproject_depth_map_to_point_map(
+                    depth_i.unsqueeze(0), 
+                    extrinsic_i.unsqueeze(0), 
+                    intrinsic_i.unsqueeze(0)
+                ).squeeze(0)
+                
+                # Flatten and filter valid points
+                h, w = point_map_i.shape[:2]
+                point_map_flat = point_map_i.reshape(-1, 3)
+                depth_flat = depth_i.reshape(-1)
+                
+                # Filter out invalid points (depth <= 0)
+                valid_mask = depth_flat > 0
+                valid_points = point_map_flat[valid_mask]
+                
+                # Get corresponding colors
+                img_colors = images_pil[i]
+                img_colors_tensor = torch.tensor(np.array(img_colors)).to(device)
+                colors_flat = img_colors_tensor.reshape(-1, 3)
+                valid_colors = colors_flat[valid_mask]
+                
+                all_pts_3d.append(valid_points)
+                all_rgb_3d.append(valid_colors)
+            
+            # Concatenate all points
+            pts_3d = torch.cat(all_pts_3d, dim=0)
+            rgb_3d = torch.cat(all_rgb_3d, dim=0).to(torch.uint8)
+            
+            # Get depth maps and confidence for compatibility
+            depth_maps = depth_map.squeeze(0)  # Remove batch dimension
+            conf = depth_conf.squeeze(0).reshape(-1, 1)  # Flatten confidence
+    
+    # Return in the same format as dust3r
+    return pts_3d,\
+           rgb_3d,\
+           world2cam,\
+           intrinsic_last,\
+           depth_maps,\
+           conf
 
 def img_to_pts_3d_da(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
     global da_model, intr_model
@@ -268,5 +398,5 @@ def img_to_pts_3d_metric(color_image, world2cam=None, intrinsics=None, tmp_dir=N
 if __name__ == '__main__':
     image_path = "./depth_anything/metric_depth/my_test/input/demo11.png"
     color_image = Image.open(image_path).convert('RGB')
-    pcd = image_to_3d(color_image)
-    breakpoint()
+    # pcd = image_to_3d(color_image)  # TODO: Fix undefined function
+    pass
