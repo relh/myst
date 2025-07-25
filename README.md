@@ -2,13 +2,9 @@
 
 Myst is a combination of Stable Diffusion and VGGT (Visual Geometry Grounded Transformer)/DepthAnything/Metric3D to create worlds that are 3D aware and go beyond outpainting.
 
-**Update**: We've replaced Dust3r/Mast3r with [VGGT](https://github.com/facebookresearch/vggt), the CVPR 2025 Best Paper Award winner, for faster and more accurate 3D reconstruction. 
+Simply, Myst lets you start with a text prompt, "an image of a kitchen", generates a 2D image from it using diffusion, lifts the 2D image to 3D, and then lets you navigate around the scene. As you rotate/move to reveal unexplored parts of the scene, you can run additional diffusion steps and new images are generated and then combined into a *single, coherent, 3D scene*. 
 
-### Why VGGT?
-- **Speed**: VGGT reconstructs scenes in <1 second vs tens of seconds for Dust3r/Mast3r
-- **Accuracy**: State-of-the-art performance on 3D reconstruction benchmarks
-- **Single-view**: Excellent zero-shot single-view reconstruction capabilities
-- **Memory efficient**: Better GPU memory usage, allowing for more iterations before OOM
+**Update**: We've replaced Dust3r/Mast3r with [VGGT](https://github.com/facebookresearch/vggt), the CVPR 2025 Best Paper Award winner, for faster and more accurate 3D reconstruction. 
 
 We can create infinite 3D scenes, for use as a potential dataset. We can manually create these worlds, or do it automatically.
 
