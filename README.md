@@ -8,10 +8,6 @@ Simply, Myst lets you start with a text prompt, "an image of a kitchen", generat
 
 We can create infinite 3D scenes, for use as a potential dataset. We can manually create these worlds, or do it automatically.
 
-**Automatic Dataset:** *Showing a few automatic datasets.*
-
-![Automatic Dataset](./img/automatic_dataset.png)
-
 **Architecture:** *Showing how we created these worlds.*
 
 ![Architecture](./img/architecture.png)
@@ -21,6 +17,10 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
 <p align="center">
   <img src="./img/demo.gif" alt="Real-time generation">
 </p>
+
+**Automatic Dataset:** *Showing a few automatic datasets.*
+
+![Automatic Dataset](./img/automatic_dataset.png)
 
 ---
 
