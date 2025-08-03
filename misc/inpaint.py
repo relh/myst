@@ -34,7 +34,10 @@ def initialize_pipeline(model):
         pipeline.next_strength = 1.0
 
         #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
-        pipeline.enable_xformers_memory_efficient_attention()
+        try:
+            pipeline.enable_xformers_memory_efficient_attention()
+        except ModuleNotFoundError:
+            print("Warning: xformers not available, using standard attention")
         pipeline = pipeline.to("cuda")
 
     elif model == 'if':

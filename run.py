@@ -43,7 +43,7 @@ from misc.three_d import (img_to_pts_3d_da, img_to_pts_3d_dust,
 def main(args, meta_idx, tmp_dir=None):
     # --- setup rerun args ---
     rr.script_setup(args, f"{meta_idx}myst")
-    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, timeless=True)
+    rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, static=True)
     if args.depth == 'da': img_to_pts_3d = img_to_pts_3d_da
     if args.depth == 'dust': img_to_pts_3d = img_to_pts_3d_dust
     if args.depth == 'metric': img_to_pts_3d = img_to_pts_3d_metric

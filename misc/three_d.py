@@ -3,10 +3,12 @@
 
 import sys
 
-sys.path.append('depth_anything/metric_depth/')
 # Commenting out dust3r/mast3r paths since we're using VGGT
+# sys.path.append('depth_anything/metric_depth/')
 # sys.path.append('mast3r/dust3r/')
 # sys.path.append('mast3r/')
+from transformers import pipeline
+from PIL import Image
 
 import argparse
 import copy
@@ -30,8 +32,8 @@ from PIL import Image
 from PIL.ImageOps import exif_transpose
 from scipy.spatial.transform import Rotation
 
-from depth_anything.metric_depth.zoedepth.models.builder import build_model
-from depth_anything.metric_depth.zoedepth.utils.config import get_config
+#from depth_anything.metric_depth.zoedepth.models.builder import build_model
+#from depth_anything.metric_depth.zoedepth.utils.config import get_config
 # Commenting out dust3r/mast3r imports since we're using VGGT
 # from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 # from dust3r.image_pairs import make_pairs
@@ -257,10 +259,13 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
 def img_to_pts_3d_da(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
     global da_model, intr_model
     if da_model is None:
-        config = get_config('zoedepth', "eval", 'nyu')
-        config.pretrained_resource = 'local::./checkpoints/depth_anything_metric_depth_indoor.pt'
-        da_model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
-        da_model.eval()
+        da_model = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
+        #config = get_config('zoedepth', "eval", 'nyu')
+        #image = Image.open('your/image/path')
+        #da_model = pipe(image)["depth"]
+        #config.pretrained_resource = 'local::./checkpoints/depth_anything_metric_depth_indoor.pt'
+        #da_model = build_model(config).to('cuda' if torch.cuda.is_available() else 'cpu')
+        #da_model.eval()
     if intr_model is None:
         intr_model = torch.hub.load('ShngJZ/WildCamera', "WildCamera", pretrained=True).cuda()
     original_width, original_height = 512, 512

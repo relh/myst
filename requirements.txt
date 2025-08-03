@@ -17,6 +17,7 @@ kornia
 diffusers
 gradio
 trimesh
+xformers
 
 # VGGT dependencies
 torch>=2.0.0
@@ -28,3 +29,5 @@ transformers>=4.30.0
 
 # Optional: Install VGGT directly from GitHub
 # pip install git+https://github.com/facebookresearch/vggt.git
+# uv pip install "git+https://github.com/isl-org/Depth-Anything.git"
+
