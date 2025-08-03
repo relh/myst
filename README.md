@@ -119,26 +119,128 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
   </tr>
 </table>
 
-## Install
+## Installation
 
-### Quick Setup with VGGT
+### Prerequisites
 
-1. Create a conda environment:
+- **Python 3.10+** (recommended: 3.12)
+- **CUDA 12.4+** for GPU acceleration
+- **NVIDIA GPU** with at least 8GB VRAM (16GB+ recommended)
+- **uv** package manager (recommended) or **pip**
+
+### Quick Setup
+
+#### Option 1: Automated Setup (Recommended)
+
+For **RTX 5080** and other newer GPUs (sm_120 architecture):
+
 ```bash
+# Install uv if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/your-repo/myst.git
+cd myst
+
+# Run the automated setup script
+chmod +x setup_rtx5080.sh
+./setup_rtx5080.sh
+```
+
+For **older GPUs** (RTX 30/40 series, sm_80/sm_89):
+
+```bash
+# Use the nuclear rebuild script for compatibility
+chmod +x nuclear_rebuild.sh
+./nuclear_rebuild.sh
+```
+
+#### Option 2: Manual Setup
+
+1. **Install uv** (recommended):
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+2. **Create virtual environment**:
+```bash
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+3. **Install PyTorch with correct CUDA version**:
+
+For **RTX 5080** (sm_120):
+```bash
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu124
+```
+
+For **RTX 30/40 series** (sm_80/sm_89):
+```bash
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu121
+```
+
+4. **Install dependencies**:
+```bash
+uv pip install -r requirements.txt
+```
+
+5. **Install xformers** (optional, for memory optimization):
+```bash
+XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install xformers --index-url https://download.pytorch.org/whl/cu124
+```
+
+6. **Install VGGT** (for 3D reconstruction):
+```bash
+uv pip install "git+https://github.com/facebookresearch/vggt.git"
+```
+
+#### Option 3: Conda Setup (Legacy)
+
+```bash
+# Create conda environment
 mamba create -n myst python=3.10
 mamba activate myst
-```
 
-2. Install VGGT and dependencies:
-```bash
-bash scripts/vggt_setup.sh
-```
+# Install PyTorch
+mamba install -y pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
 
-3. Install other dependencies:
-```bash
-mamba install -y pytorch torchvision torchaudio pytorch-cuda=12.1 diffusers xformers pytorch3d -c pytorch -c nvidia -c pytorch3d -c conda-forge
+# Install other dependencies
+mamba install -y diffusers xformers pytorch3d -c pytorch -c nvidia -c pytorch3d -c conda-forge
 pip install -r requirements.txt
 ```
+
+### Troubleshooting
+
+#### RTX 5080 Compatibility Issues
+
+If you encounter CUDA architecture errors with RTX 5080:
+
+1. **Check your CUDA version**:
+```bash
+nvidia-smi
+```
+
+2. **Verify PyTorch installation**:
+```bash
+python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0)}')"
+```
+
+3. **Reinstall with correct CUDA version**:
+```bash
+# Remove existing PyTorch
+uv pip uninstall torch torchvision torchaudio -y
+
+# Install with CUDA 12.4
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu124
+```
+
+#### Common Issues
+
+- **"No module named pip"**: You're using `uv` - use `uv pip` instead of `python -m pip`
+- **CUDA architecture mismatch**: Use the correct CUDA version for your GPU
+- **xformers compilation errors**: Use `XFORMERS_DISABLE_FLASH_ATTN=1` flag
+- **Memory issues**: Reduce batch size or use CPU mode for testing
 
 ## Run
 
@@ -152,4 +254,33 @@ You can also use other depth estimation methods:
 - `--depth metric`: Metric3D
 - `--depth da`: Depth Anything
 - `--depth dust`: Dust3r/Mast3r (requires uncommenting imports in misc/three_d.py)
+
+### Command Line Options
+
+```bash
+python run.py [OPTIONS]
+
+Options:
+  --headless              Don't show GUI
+  --depth DEPTH           vggt / metric / da / dust
+  --renderer RENDERER     raster / py3d
+  --prompt PROMPT         me / doors / auto / combo / default
+  --control CONTROL       me / doors / auto
+  --intrinsics INTRINSICS dummy / pf
+  --image IMAGE           gen / path
+  --model MODEL           sd2 / if
+```
+
+### Examples
+
+```bash
+# Interactive mode with VGGT
+python run.py --depth vggt --prompt auto --control auto
+
+# Headless mode for dataset generation
+python run.py --headless --depth vggt --prompt auto --control auto
+
+# Use specific image as starting point
+python run.py --image path/to/your/image.jpg --depth vggt
+```
 
