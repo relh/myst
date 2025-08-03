@@ -9,12 +9,20 @@ imgaug
 iopath
 imagecorruptions
 mmcv
+torch
+numpy
+lpips
+open3d
+kornia
+diffusers
+gradio
+trimesh
 
 # VGGT dependencies
 torch>=2.0.0
 torchvision>=0.15.0
 einops
-flash-attn>=2.0.0
+#flash-attn>=2.0.0
 huggingface-hub
 transformers>=4.30.0
 
