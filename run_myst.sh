@@ -12,11 +12,11 @@ source "$SCRIPT_DIR/.venv/bin/activate"
 PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
 
 # Set up PYTHONPATH to include VGGT
-export PYTHONPATH="$SCRIPT_DIR/../vggt:$PYTHONPATH"
+export PYTHONPATH="$SCRIPT_DIR/vggt:$PYTHONPATH"
 
 # Check if VGGT directory exists
-if [ ! -d "$SCRIPT_DIR/../vggt" ]; then
-    echo "Warning: VGGT directory not found at $SCRIPT_DIR/../vggt"
+if [ ! -d "$SCRIPT_DIR/vggt" ]; then
+    echo "Warning: VGGT directory not found at $SCRIPT_DIR/vggt"
     echo "Please run ./setup_env.sh first"
     exit 1
 fi

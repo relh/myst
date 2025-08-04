@@ -52,7 +52,29 @@ fi
 
 echo "Step 1: Installing PyTorch nightly build with CUDA 12.8 support..."
 # Install latest nightly build for RTX 5080 support
+# RTX 5080 requires sm_120 support which is in newer PyTorch builds
+echo "Installing PyTorch with RTX 5080 (sm_120) support..."
 uv pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+
+# Verify CUDA compute capability support
+python -c "
+import torch
+if torch.cuda.is_available():
+    capability = torch.cuda.get_device_capability(0)
+    print(f'GPU detected: {torch.cuda.get_device_name(0)}')
+    print(f'CUDA capability: {capability}')
+    if capability[0] == 12 and capability[1] == 0:
+        print('✓ RTX 5080 (sm_120) support confirmed')
+    # Test a simple CUDA operation
+    try:
+        x = torch.ones(1).cuda()
+        print('✓ CUDA operations working')
+    except RuntimeError as e:
+        print(f'⚠ CUDA operation failed: {e}')
+        print('You may need a newer PyTorch build')
+else:
+    print('⚠ CUDA not available')
+"
 
 echo "Step 2: Installing core dependencies..."
 if [ "$REBUILD" = true ]; then
@@ -67,61 +89,51 @@ fi
 echo "Step 3: Installing kornia (without flash attention)..."
 FLASH_ATTN_SKIP_CUDA_BUILD=1 uv pip install kornia
 
-echo "Step 4: Installing xformers..."
-# Check if xformers needs to be built from source for sm_120 (RTX 5080)
-BUILD_FROM_SOURCE=false
-if python -c "import torch; exit(0 if torch.cuda.is_available() else 1)" 2>/dev/null; then
-    python -c "import torch; print(f'CUDA capability: {torch.cuda.get_device_capability(0)}')" 2>/dev/null | grep -q "(12, 0)" && BUILD_FROM_SOURCE=true
-fi
-
-if [ "$BUILD_FROM_SOURCE" = true ]; then
-    echo "Detected sm_120 GPU (RTX 5080), building xformers from source..."
-    # Set environment variables for building with sm_120 support
-    export TORCH_CUDA_ARCH_LIST="5.0;6.0;7.0;7.5;8.0;8.6;8.9;9.0;12.0"
-    export XFORMERS_ENABLE_DEBUG_ASSERTIONS=0
-    export XFORMERS_DISABLE_FLASH_ATTN=1
-    export MAX_JOBS=4
-    
-    # Install build dependencies
-    uv pip install ninja packaging
-    
-    # Build and install xformers from source
-    uv pip install -v -U git+https://github.com/facebookresearch/xformers.git@main#egg=xformers
-else
-    echo "Installing pre-built xformers nightly..."
-    # Try nightly build first for better compatibility
-    XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install --pre xformers --index-url https://download.pytorch.org/whl/nightly/cu128 || {
-        echo "Nightly xformers failed, trying stable..."
-        XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install xformers --index-url https://download.pytorch.org/whl/cu128
-    }
-fi
+echo "Step 4: Installing xformers (optional)..."
+# For RTX 5080 and other newer GPUs, xformers may not be available or necessary
+# The code will fall back to standard attention if xformers is not available
+echo "Attempting to install xformers..."
+XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install --pre xformers --index-url https://download.pytorch.org/whl/nightly/cu128 || {
+    echo "xformers installation failed - will use standard attention (this is fine)"
+    echo "Note: xformers is optional and the code will work without it"
+}
 
 echo "Step 5: Installing PyTorch3D (optional)..."
 uv pip install pytorch3d || echo "PyTorch3D installation failed - will use fallback renderer"
 
 echo "Step 6: Setting up VGGT..."
-# Get the parent directory of the current myst directory
-PARENT_DIR="$(dirname "$(pwd)")"
-VGGT_DIR="$PARENT_DIR/vggt"
+# Clone VGGT directly into the myst directory
+VGGT_DIR="$(pwd)/vggt"
 
 if [ ! -d "$VGGT_DIR" ]; then
-    echo "Cloning VGGT repository to $VGGT_DIR..."
-    cd "$PARENT_DIR"
+    echo "Cloning VGGT repository..."
     git clone https://github.com/facebookresearch/vggt.git
+    
+    echo "Installing VGGT requirements..."
     cd vggt
-    # Create missing __init__.py files
-    echo "Creating missing __init__.py files..."
-    echo "# VGGT package initialization" > vggt/__init__.py
-    echo "# VGGT models package initialization" > vggt/models/__init__.py
-    echo "from .vggt import VGGT" >> vggt/models/__init__.py
-    echo "__all__ = ['VGGT']" >> vggt/models/__init__.py
-    cd "$(pwd)/myst"
+    # Install VGGT dependencies
+    uv pip install -r requirements.txt
+    
+    # Download model checkpoint
+    echo "Downloading VGGT model checkpoint..."
+    mkdir -p checkpoints
+    cd checkpoints
+    # Download the commercial-use allowed checkpoint
+    if [ ! -f "vggt_1b.pth" ]; then
+        echo "Downloading VGGT-1B model (this may take a while)..."
+        wget -q --show-progress https://dl.fbaipublicfiles.com/vggt/checkpoints/vggt_1b.pth || {
+            echo "Failed to download model. You can manually download from:"
+            echo "https://dl.fbaipublicfiles.com/vggt/checkpoints/vggt_1b.pth"
+            echo "and place it in $VGGT_DIR/checkpoints/"
+        }
+    fi
+    cd ../..
 else
     echo "VGGT repository already exists at $VGGT_DIR"
 fi
 
 echo "Step 7: Testing installation..."
-VGGT_DIR="$PARENT_DIR/vggt"
+VGGT_DIR="$(pwd)/vggt"
 PYTHONPATH="$VGGT_DIR:$PYTHONPATH" python -c "
 import torch
 print(f'PyTorch: {torch.__version__}')
@@ -134,8 +146,11 @@ import diffusers
 print(f'Diffusers: {diffusers.__version__}')
 import kornia
 print('Kornia loaded successfully')
-import xformers
-print(f'Xformers: {xformers.__version__}')
+try:
+    import xformers
+    print(f'Xformers: {xformers.__version__}')
+except ImportError:
+    print('Xformers not available - using standard attention')
 try:
     import pytorch3d
     print('PyTorch3D loaded successfully')
@@ -162,7 +177,10 @@ echo "You can now run Myst using:"
 echo "  ./run_myst.sh --headless --depth vggt --renderer raster --prompt auto --control auto --image gen --model sd2"
 echo ""
 echo "Or manually with:"
-echo "  PYTHONPATH=$VGGT_DIR:\$PYTHONPATH python run.py"
+echo "  PYTHONPATH=$(pwd)/vggt:\$PYTHONPATH python run.py"
 echo ""
 echo "Note: The script will automatically fall back to raster renderer if PyTorch3D is not available."
 echo "Note: xformers flash attention is disabled for compatibility."
+echo ""
+echo "Optional: To use Dust3r/Mast3r instead of VGGT, run:"
+echo "  bash scripts/setup_dust3r_mast3r.sh"

@@ -1,28 +1,21 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import sys
-
-# Commenting out dust3r/mast3r paths since we're using VGGT
-# sys.path.append('depth_anything/metric_depth/')
-# sys.path.append('mast3r/dust3r/')
-# sys.path.append('mast3r/')
-from transformers import pipeline
-from PIL import Image
-
+# Standard library imports
 import argparse
 import copy
 import functools
 import math
 import os
+import sys
 import tempfile
 
+# Third-party imports
 import cv2
 import einops
 import gradio
 import matplotlib.pyplot as pl
 import numpy as np
-import PIL.Image
 import rerun as rr  # pip install rerun-sdk
 import torch
 import torchvision.transforms as transforms
@@ -31,10 +24,35 @@ import trimesh
 from PIL import Image
 from PIL.ImageOps import exif_transpose
 from scipy.spatial.transform import Rotation
+from transformers import pipeline
 
-#from depth_anything.metric_depth.zoedepth.models.builder import build_model
-#from depth_anything.metric_depth.zoedepth.utils.config import get_config
-# Commenting out dust3r/mast3r imports since we're using VGGT
+# Local imports
+from misc.camera import pts_cam_to_world
+from misc.supersample import supersample_point_cloud
+
+# Conditional imports - VGGT
+try:
+    from vggt.models import VGGT
+    from vggt.utils.geometry import unproject_depth_map_to_point_map
+    from vggt.utils.pose_enc import pose_encoding_to_extri_intri
+    VGGT_AVAILABLE = True
+except ImportError:
+    VGGT_AVAILABLE = False
+    print("VGGT not installed. Please run ./setup_env.sh to install VGGT")
+
+# Conditional imports - perspective2d
+try:
+    from perspective2d import PerspectiveFields
+    PERSPECTIVE2D_AVAILABLE = True
+except ImportError:
+    PERSPECTIVE2D_AVAILABLE = False
+
+# Legacy imports (kept for reference but commented out)
+# sys.path.append('depth_anything/metric_depth/')
+# sys.path.append('mast3r/dust3r/')
+# sys.path.append('mast3r/')
+# from depth_anything.metric_depth.zoedepth.models.builder import build_model
+# from depth_anything.metric_depth.zoedepth.utils.config import get_config
 # from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
 # from dust3r.image_pairs import make_pairs
 # from dust3r.inference import inference
@@ -46,8 +64,6 @@ from scipy.spatial.transform import Rotation
 # from mast3r.fast_nn import fast_reciprocal_NNs
 # from mast3r.model import AsymmetricMASt3R
 # from mast3r.utils.misc import hash_md5
-from misc.camera import pts_cam_to_world
-from misc.supersample import supersample_point_cloud
 
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 metric_model = None
@@ -148,19 +164,49 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     if vggt_model is None:
         try:
             # Try to load VGGT model
-            from vggt.models import VGGT
+            if not VGGT_AVAILABLE:
+                raise ImportError("VGGT module not available")
+            
+            # Initialize VGGT model
             vggt_model = VGGT()
+            
+            # Load checkpoint if available
+            import os
+            checkpoint_paths = [
+                "vggt/checkpoints/vggt_1b.pth",  # Local path in myst directory
+                os.path.expanduser("~/.cache/torch/hub/checkpoints/vggt_1b.pth"),  # Torch hub cache
+            ]
+            
+            checkpoint_loaded = False
+            for checkpoint_path in checkpoint_paths:
+                if os.path.exists(checkpoint_path):
+                    print(f"Loading VGGT checkpoint from {checkpoint_path}...")
+                    checkpoint = torch.load(checkpoint_path, map_location=device)
+                    vggt_model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
+                    checkpoint_loaded = True
+                    break
+            
+            if not checkpoint_loaded:
+                print("Warning: No VGGT checkpoint found. Using random weights.")
+                print("Download checkpoint from: https://dl.fbaipublicfiles.com/vggt/checkpoints/vggt_1b.pth")
+                print("and place it in vggt/checkpoints/")
+            
             vggt_model = vggt_model.to(device)
             vggt_model.eval()
+            
         except ImportError:
-            print("VGGT not installed. Please install with: pip install vggt")
+            print("VGGT not installed. Please run ./setup_env.sh to install VGGT")
             raise
         except Exception as e:
             print(f"Error loading VGGT model: {e}")
-            print("Trying alternative loading method...")
-            # Alternative loading method based on VGGT repo
-            vggt_model = torch.hub.load('facebookresearch/vggt', 'vggt', trust_repo=True).to(device)
-            vggt_model.eval()
+            # Try torch.hub as fallback
+            try:
+                print("Trying to load via torch.hub...")
+                vggt_model = torch.hub.load('facebookresearch/vggt', 'vggt', trust_repo=True).to(device)
+                vggt_model.eval()
+            except Exception as hub_e:
+                print(f"Torch hub loading also failed: {hub_e}")
+                raise
     
     # Convert images to the format VGGT expects
     if isinstance(images[0], torch.Tensor):
@@ -170,7 +216,6 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
         images_pil = images
     
     # Prepare images tensor for VGGT (expects normalized float32/bfloat16)
-    from torchvision import transforms
     # VGGT expects image dimensions divisible by patch size (14)
     # Common sizes: 224, 336, 448, 560, 672, 784, 896
     target_size = 560  # 560 / 14 = 40 patches
@@ -183,7 +228,7 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     images_tensor = torch.stack([transform(img) for img in images_pil]).to(device)
     
     with torch.no_grad():
-        with torch.cuda.amp.autocast(dtype=dtype):
+        with torch.amp.autocast('cuda', dtype=dtype):
             # Add batch dimension
             images_batch = images_tensor[None]  # shape: (1, num_images, 3, H, W)
             
@@ -191,7 +236,6 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             aggregated_tokens_list, ps_idx = vggt_model.aggregator(images_batch)
             
             # Predict cameras
-            from vggt.utils.pose_enc import pose_encoding_to_extri_intri
             pose_enc = vggt_model.camera_head(aggregated_tokens_list)[-1]
             extrinsic, intrinsic = pose_encoding_to_extri_intri(pose_enc, images_batch.shape[-2:])
             
@@ -199,7 +243,6 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             depth_map, depth_conf = vggt_model.depth_head(aggregated_tokens_list, images_batch, ps_idx)
             
             # Construct 3D points from depth maps
-            from vggt.utils.geometry import unproject_depth_map_to_point_map
             
             # We'll use the last image's camera parameters as the reference
             last_idx = len(images) - 1
@@ -233,32 +276,63 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
                 
                 # Filter out invalid points (depth <= 0)
                 valid_mask = depth_flat > 0
-                valid_points = point_map_flat[valid_mask]
                 
-                # Get corresponding colors
-                img_colors = images_pil[i]
-                img_colors_tensor = torch.tensor(np.array(img_colors)).to(device)
-                colors_flat = img_colors_tensor.reshape(-1, 3)
-                valid_colors = colors_flat[valid_mask]
-                
-                all_pts_3d.append(valid_points)
-                all_rgb_3d.append(valid_colors)
+                # Count valid points
+                num_valid = valid_mask.sum().item()
+                if num_valid > 0:
+                    # Debug info
+                    print(f"Debug: valid_mask type: {type(valid_mask)}, device: {valid_mask.device}")
+                    print(f"Debug: point_map_flat type: {type(point_map_flat)}, device: {point_map_flat.device}")
+                    
+                    # Get valid points using boolean indexing (staying on GPU)
+                    valid_points = point_map_flat[valid_mask]
+                    
+                    # Get corresponding colors
+                    img_colors = images_pil[i]
+                    # Convert PIL image to tensor on the correct device
+                    img_array = np.array(img_colors)
+                    img_colors_tensor = torch.from_numpy(img_array).to(device, dtype=torch.float32)
+                    colors_flat = img_colors_tensor.reshape(-1, 3)
+                    valid_colors = colors_flat[valid_mask]
+                    
+                    all_pts_3d.append(valid_points)
+                    all_rgb_3d.append(valid_colors)
+                else:
+                    # Skip if no valid points
+                    continue
             
-            # Concatenate all points
-            pts_3d = torch.cat(all_pts_3d, dim=0)
-            rgb_3d = torch.cat(all_rgb_3d, dim=0).to(torch.uint8)
+            # Concatenate all points from all images
+            if all_pts_3d:
+                pts_3d = torch.cat(all_pts_3d, dim=0)
+                rgb_3d = torch.cat(all_rgb_3d, dim=0).to(torch.uint8)
+            else:
+                # Handle case with no valid points
+                pts_3d = torch.zeros((0, 3), device=device)
+                rgb_3d = torch.zeros((0, 3), dtype=torch.uint8, device=device)
             
-            # Get depth maps and confidence for compatibility
-            depth_maps = depth_map.squeeze(0)  # Remove batch dimension
-            conf = depth_conf.squeeze(0).reshape(-1, 1)  # Flatten confidence
+            # Get depth maps for all images (dust3r returns stacked depth maps)
+            depth_maps = depth_map.squeeze(0)  # Shape: (num_images, H, W)
+            
+            # Create confidence maps for all images
+            # For VGGT, we'll use depth confidence for all pixels
+            num_images = len(images)
+            h, w = images_batch.shape[-2:]
+            
+            # Reshape depth_conf to match dust3r format
+            if depth_conf.dim() == 3:  # (1, num_images, HW)
+                conf = depth_conf.squeeze(0)  # (num_images, HW)
+            else:
+                # Create confidence based on valid depth values
+                conf = (depth_maps > 0).float().reshape(num_images, -1)
     
-    # Return in the same format as dust3r
+    # Return in the exact same format as dust3r
+    # dust3r returns: pts_3d (N,3), rgb_3d (N,3), world2cam (4,4), intrinsics (3,3), depth_maps (B,H,W), conf (N,1)
     return pts_3d,\
            rgb_3d,\
            world2cam,\
            intrinsic_last,\
            depth_maps,\
-           conf
+           conf.reshape(-1, 1)  # Flatten all confidence values
 
 def img_to_pts_3d_da(color_image, world2cam=None, intrinsics=None, tmp_dir=None):
     global da_model, intr_model
@@ -352,7 +426,8 @@ def img_to_pts_3d_metric(color_image, world2cam=None, intrinsics=None, tmp_dir=N
         metric_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_giant2', pretrain=True).cuda()
         #metric_model = torch.hub.load('yvanyin/metric3d', 'metric3d_vit_large', pretrain=True).cuda()
     if intr_model is None and intrinsics is None:
-        from perspective2d import PerspectiveFields
+        if not PERSPECTIVE2D_AVAILABLE:
+            raise ImportError("perspective2d module not available")
         version = 'Paramnet-360Cities-edina-centered'
         intr_model = PerspectiveFields(version).eval().cuda()
     original_width, original_height = 512, 512

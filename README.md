@@ -167,10 +167,10 @@ python run.py --depth vggt
 ```
 
 You can also use other depth estimation methods:
-- `--depth vggt` (default): VGGT - fastest and most accurate
+- `--depth vggt` (default): VGGT - fastest and most accurate (CVPR 2025 Best Paper)
 - `--depth metric`: Metric3D
 - `--depth da`: Depth Anything
-- `--depth dust`: Dust3r/Mast3r (requires uncommenting imports in misc/three_d.py)
+- `--depth dust`: Dust3r/Mast3r (requires setup - see scripts/setup_dust3r_mast3r.sh)
 
 ### Command Line Options
 

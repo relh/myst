@@ -65,6 +65,9 @@ def generate_prompt(prompt):
         foreground = random.choice(objects)
         background = random.choice(backgrounds + outdoors + indoors)
         return f"A {camera}photograph {vantage}at {foreground[:-1]} {arrangement[:-1]} {background.lower()[:-1]}"
+    else:
+        # Use the prompt as-is if it's not a special keyword
+        return prompt
 
 if __name__ == "__main__":
     # Generate and print a sample prompt
