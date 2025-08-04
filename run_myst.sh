@@ -11,6 +11,9 @@ source "$SCRIPT_DIR/.venv/bin/activate"
 # Use the correct Python from the virtual environment
 PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
 
+# Set memory optimization for CUDA
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # No need to set PYTHONPATH since VGGT is installed as a package
 # Just check if VGGT directory exists
 if [ ! -d "$SCRIPT_DIR/vggt" ]; then

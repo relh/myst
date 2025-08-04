@@ -89,14 +89,33 @@ fi
 echo "Step 3: Installing kornia (without flash attention)..."
 FLASH_ATTN_SKIP_CUDA_BUILD=1 uv pip install kornia
 
-echo "Step 4: Installing xformers (optional)..."
-# For RTX 5080 and other newer GPUs, xformers may not be available or necessary
-# The code will fall back to standard attention if xformers is not available
+echo "Step 4: Installing xformers for memory efficiency..."
+# Try to install xformers - it significantly reduces memory usage
+# First check if we have CUDA 12.8 compatible xformers
 echo "Attempting to install xformers..."
-XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install --pre xformers --index-url https://download.pytorch.org/whl/nightly/cu128 || {
-    echo "xformers installation failed - will use standard attention (this is fine)"
-    echo "Note: xformers is optional and the code will work without it"
-}
+
+# Set environment variables for memory efficiency
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+# Try pre-built xformers from PyTorch nightly  
+if ! uv pip install xformers --index-url https://download.pytorch.org/whl/cu121; then
+    echo "Pre-built xformers not available for your configuration"
+    echo "Attempting to build xformers from source (this may take a while)..."
+    
+    # Install build dependencies
+    uv pip install ninja
+    
+    # Set build flags for RTX 5080 compatibility
+    export TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0+PTX"
+    export XFORMERS_ENABLE_DEBUG_ASSERTIONS=0
+    export MAX_JOBS=4
+    
+    # Build xformers from source - use 0.0.23 which has better compatibility
+    if ! uv pip install "xformers==0.0.23" --no-deps; then
+        echo "xformers installation failed - will use standard attention"
+        echo "This may result in higher memory usage"
+    fi
+fi
 
 echo "Step 5: Installing PyTorch3D (optional)..."
 uv pip install pytorch3d || echo "PyTorch3D installation failed - will use fallback renderer"

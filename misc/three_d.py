@@ -221,7 +221,7 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     # Prepare images tensor for VGGT (expects normalized float32/bfloat16)
     # VGGT expects image dimensions divisible by patch size (14)
     # Common sizes: 224, 336, 448, 560, 672, 784, 896
-    target_size = 560  # 560 / 14 = 40 patches
+    target_size = 448  # 448 / 14 = 32 patches - reduced for memory efficiency
     transform = transforms.Compose([
         transforms.Resize((target_size, target_size)),
         transforms.ToTensor(),
