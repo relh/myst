@@ -123,8 +123,8 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
 
 ### Prerequisites
 
-- **Python 3.10+** (recommended: 3.12)
-- **CUDA 12.4+** for GPU acceleration
+- **Python 3.12+** (recommended)
+- **CUDA 12.8+** for GPU acceleration (RTX 5080 compatibility)
 - **NVIDIA GPU** with at least 8GB VRAM (16GB+ recommended)
 - **uv** package manager (recommended) or **pip**
 
@@ -142,9 +142,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/your-repo/myst.git
 cd myst
 
-# Run the automated setup script
-chmod +x setup_rtx5080.sh
-./setup_rtx5080.sh
+# Run the complete automated setup script
+chmod +x setup_rtx5080_complete.sh
+./setup_rtx5080_complete.sh
 ```
 
 For **older GPUs** (RTX 30/40 series, sm_80/sm_89):
@@ -172,12 +172,12 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 For **RTX 5080** (sm_120):
 ```bash
-uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu124
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
 ```
 
 For **RTX 30/40 series** (sm_80/sm_89):
 ```bash
-uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu121
+uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
 4. **Install dependencies**:
@@ -187,7 +187,7 @@ uv pip install -r requirements.txt
 
 5. **Install xformers** (optional, for memory optimization):
 ```bash
-XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install xformers --index-url https://download.pytorch.org/whl/cu124
+XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install xformers --index-url https://download.pytorch.org/whl/cu128
 ```
 
 6. **Install VGGT** (for 3D reconstruction):

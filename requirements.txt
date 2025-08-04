@@ -15,10 +15,8 @@ gradio>=4.0.0
 
 # PyTorch ecosystem (RTX 5080 compatible)
 # Note: These must be installed with specific CUDA version for RTX 5080 (sm_120)
-# Install with: uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu124
-torch==2.7.1+cu124
-torchvision==0.22.1+cu124
-torchaudio==2.7.1+cu124
+# Install with: uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# torch, torchvision, torchaudio are installed separately due to CUDA version requirements
 
 # 3D and computer vision
 open3d>=0.19.0
@@ -33,7 +31,7 @@ accelerate>=0.30.0
 huggingface-hub>=0.30.0
 
 # Memory optimization (optional, for RTX 5080)
-# Install with: XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install xformers --index-url https://download.pytorch.org/whl/cu124
+# Install with: XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install xformers --index-url https://download.pytorch.org/whl/cu128
 xformers>=0.0.23
 
 # Computer vision and ML
@@ -47,4 +45,8 @@ einops>=0.8.0
 
 # Rerun for visualization
 rerun-sdk>=0.24.0
+
+# VGGT dependencies (installed separately)
+# VGGT requires manual setup: git clone https://github.com/facebookresearch/vggt.git ../vggt
+# Then create missing __init__.py files as shown in setup_rtx5080_complete.sh
 
