@@ -11,7 +11,13 @@ import tty
 from argparse import ArgumentParser
 
 import torch
-from pytorch3d.transforms import Transform3d
+
+# Conditionally import PyTorch3D
+try:
+    from pytorch3d.transforms import Transform3d
+    PYTORCH3D_AVAILABLE = True
+except ImportError:
+    PYTORCH3D_AVAILABLE = False
 
 from misc.scale import median_scene_distance
 

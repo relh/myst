@@ -8,7 +8,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import open3d as o3d
 import torch
-from pytorch3d.transforms import Transform3d
+
+# Conditionally import PyTorch3D
+try:
+    from pytorch3d.transforms import Transform3d
+    PYTORCH3D_AVAILABLE = True
+except ImportError:
+    PYTORCH3D_AVAILABLE = False
 
 from misc.camera import project_to_image, pts_cam_to_world, pts_world_to_unique
 

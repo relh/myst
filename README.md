@@ -124,123 +124,40 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
 ### Prerequisites
 
 - **Python 3.12+** (recommended)
-- **CUDA 12.8+** for GPU acceleration (RTX 5080 compatibility)
-- **NVIDIA GPU** with at least 8GB VRAM (16GB+ recommended)
-- **uv** package manager (recommended) or **pip**
+- **CUDA 12.x+** for GPU acceleration (NVIDIA GPU with at least 8GB VRAM recommended)
+- **uv** package manager (recommended for fast, reproducible installs):  
+  [Install uv](https://astral.sh/uv/):  
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
 
 ### Quick Setup
 
-#### Option 1: Automated Setup (Recommended)
-
-For **RTX 5080** and other newer GPUs (sm_120 architecture):
-
 ```bash
-# Install uv if you don't have it
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
 # Clone the repository
 git clone https://github.com/your-repo/myst.git
 cd myst
 
-# Run the complete automated setup script
-chmod +x setup_rtx5080_complete.sh
-./setup_rtx5080_complete.sh
+# Run the environment setup script
+chmod +x setup_env.sh
+./setup_env.sh
 ```
 
-For **older GPUs** (RTX 30/40 series, sm_80/sm_89):
+This will:
+- Create a virtual environment (if not already active)
+- Install all dependencies (PyTorch, torchvision, torchaudio, xformers, kornia, etc.)
+- Set up VGGT if not already present
 
+### Running Myst
+
+After setup, you can run Myst with:
 ```bash
-# Use the nuclear rebuild script for compatibility
-chmod +x nuclear_rebuild.sh
-./nuclear_rebuild.sh
+./run_myst.sh --headless --depth vggt --renderer raster --prompt auto --control auto --image gen --model sd2
 ```
-
-#### Option 2: Manual Setup
-
-1. **Install uv** (recommended):
+Or, for manual runs:
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+PYTHONPATH=../vggt:$VIRTUAL_ENV/lib/python3.12/site-packages python run.py
 ```
-
-2. **Create virtual environment**:
-```bash
-uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-```
-
-3. **Install PyTorch with correct CUDA version**:
-
-For **RTX 5080** (sm_120):
-```bash
-uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
-```
-
-For **RTX 30/40 series** (sm_80/sm_89):
-```bash
-uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-```
-
-4. **Install dependencies**:
-```bash
-uv pip install -r requirements.txt
-```
-
-5. **Install xformers** (optional, for memory optimization):
-```bash
-XFORMERS_DISABLE_FLASH_ATTN=1 uv pip install xformers --index-url https://download.pytorch.org/whl/cu128
-```
-
-6. **Install VGGT** (for 3D reconstruction):
-```bash
-uv pip install "git+https://github.com/facebookresearch/vggt.git"
-```
-
-#### Option 3: Conda Setup (Legacy)
-
-```bash
-# Create conda environment
-mamba create -n myst python=3.10
-mamba activate myst
-
-# Install PyTorch
-mamba install -y pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
-
-# Install other dependencies
-mamba install -y diffusers xformers pytorch3d -c pytorch -c nvidia -c pytorch3d -c conda-forge
-pip install -r requirements.txt
-```
-
-### Troubleshooting
-
-#### RTX 5080 Compatibility Issues
-
-If you encounter CUDA architecture errors with RTX 5080:
-
-1. **Check your CUDA version**:
-```bash
-nvidia-smi
-```
-
-2. **Verify PyTorch installation**:
-```bash
-python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.version.cuda}'); print(f'GPU: {torch.cuda.get_device_name(0)}')"
-```
-
-3. **Reinstall with correct CUDA version**:
-```bash
-# Remove existing PyTorch
-uv pip uninstall torch torchvision torchaudio -y
-
-# Install with CUDA 12.4
-uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu124
-```
-
-#### Common Issues
-
-- **"No module named pip"**: You're using `uv` - use `uv pip` instead of `python -m pip`
-- **CUDA architecture mismatch**: Use the correct CUDA version for your GPU
-- **xformers compilation errors**: Use `XFORMERS_DISABLE_FLASH_ATTN=1` flag
-- **Memory issues**: Reduce batch size or use CPU mode for testing
 
 ## Run
 
