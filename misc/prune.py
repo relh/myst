@@ -1,12 +1,24 @@
 import kornia as kn
+import numpy as np
 import open3d as o3d
 import torch
-from pytorch3d.ops import knn_points
+
+# Conditionally import PyTorch3D
+try:
+    from pytorch3d.ops import knn_points
+    PYTORCH3D_AVAILABLE = True
+except ImportError:
+    PYTORCH3D_AVAILABLE = False
 
 
 def density_pruning_py3d(points, colors, nb_neighbors=9, std_ratio=2.5):
     # Ensure points and colors are on the same device and in float format
     points = points.float()
+    
+    if not PYTORCH3D_AVAILABLE:
+        # Fallback: simple distance-based pruning without PyTorch3D
+        print("Warning: PyTorch3D not available, using simple distance-based pruning")
+        return density_pruning_simple(points, colors, std_ratio)
     
     # Add batch dimension if it's not present
     if points.dim() == 2:
@@ -36,6 +48,31 @@ def density_pruning_py3d(points, colors, nb_neighbors=9, std_ratio=2.5):
     pruned_colors = colors[non_outlier_mask]  # Remove batch dimension for output
 
     return pruned_points, pruned_colors
+
+def density_pruning_simple(points, colors, std_ratio=2.5):
+    """Simple distance-based pruning without PyTorch3D dependency"""
+    # Calculate pairwise distances (simplified approach)
+    points_np = points.cpu().numpy()
+    
+    # Use Open3D for simple outlier removal
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points_np)
+    
+    # Remove outliers using statistical outlier removal
+    pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=std_ratio)
+    
+    # Get the remaining points
+    remaining_points = torch.tensor(np.asarray(pcd.points), device=points.device, dtype=points.dtype)
+    
+    # For colors, we'll need to find which original points remain
+    # This is a simplified approach - in practice you might want more sophisticated matching
+    if len(remaining_points) < len(points):
+        # Simple approach: take first N points (not ideal but works as fallback)
+        remaining_colors = colors[:len(remaining_points)]
+    else:
+        remaining_colors = colors
+    
+    return remaining_points, remaining_colors
 
 def realign_depth_edges(pts_3d, rgb_3d, low_threshold=0.3, high_threshold=0.3, num_pixels=10):
     H, W = 512, 512

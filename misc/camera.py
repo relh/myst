@@ -7,10 +7,16 @@ import numpy as np
 import open3d as o3d
 import rerun as rr  # pip install rerun-sdk
 import torch
-from pytorch3d.renderer import (NormWeightedCompositor,
-                                PointsRasterizationSettings, PointsRasterizer,
-                                PointsRenderer, PulsarPointsRenderer)
-from pytorch3d.structures import Pointclouds
+# Conditionally import PyTorch3D
+try:
+    from pytorch3d.renderer import (NormWeightedCompositor,
+                                    PointsRasterizationSettings, PointsRasterizer,
+                                    PointsRenderer, PulsarPointsRenderer)
+    from pytorch3d.structures import Pointclouds
+    PYTORCH3D_AVAILABLE = True
+except ImportError:
+    PYTORCH3D_AVAILABLE = False
+    print("Warning: PyTorch3D not available in camera.py. Py3D renderer will not work.")
 
 
 def move_camera(extrinsics, direction, amount):
@@ -150,6 +156,10 @@ def pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape,
     return image_t.clone().float()
 
 def pts_3d_to_img_py3d(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale=None, bbox=None):
+    if not PYTORCH3D_AVAILABLE:
+        print("Warning: PyTorch3D not available, falling back to raster renderer")
+        return pts_3d_to_img_raster(points_3d, colors, intrinsics, extrinsics, image_shape, cameras, scale, bbox)
+    
     from misc.scale import median_scene_distance
     image_shape = (int(image_shape[0]), int(image_shape[1]))
 

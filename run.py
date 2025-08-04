@@ -23,7 +23,13 @@ import lpips
 import rerun as rr  # pip install rerun-sdk
 from matplotlib import pyplot as plt
 from PIL import Image
-from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
+# Conditionally import PyTorch3D only when needed
+try:
+    from pytorch3d.renderer import OrthographicCameras, PerspectiveCameras
+    PYTORCH3D_AVAILABLE = True
+except ImportError:
+    PYTORCH3D_AVAILABLE = False
+    print("Warning: PyTorch3D not available. Only raster renderer will work.")
 
 from misc.camera import (move_camera, pts_3d_to_img_py3d, pts_3d_to_img_raster,
                          pts_cam_to_world)
@@ -48,6 +54,11 @@ def main(args, meta_idx, tmp_dir=None):
     if args.depth == 'dust': img_to_pts_3d = img_to_pts_3d_dust
     if args.depth == 'metric': img_to_pts_3d = img_to_pts_3d_metric
     if args.depth == 'vggt': img_to_pts_3d = img_to_pts_3d_vggt
+    
+    # Check PyTorch3D availability and set renderer accordingly
+    if args.renderer == 'py3d' and not PYTORCH3D_AVAILABLE:
+        print("Warning: PyTorch3D not available, falling back to raster renderer")
+        args.renderer = 'raster'
     pts_3d_to_img = pts_3d_to_img_raster if args.renderer == 'raster' else pts_3d_to_img_py3d 
 
     sequence = []
@@ -87,7 +98,7 @@ def main(args, meta_idx, tmp_dir=None):
             pts_3d, rgb_3d = density_pruning_py3d(pts_3d, rgb_3d)
 
         # --- establish camera parameters ---
-        if args.renderer == 'py3d':
+        if args.renderer == 'py3d' and PYTORCH3D_AVAILABLE:
             cameras = PerspectiveCameras(
                 in_ndc=False,
                 focal_length=((intrinsics[0,0], intrinsics[1,1]),),
@@ -95,6 +106,8 @@ def main(args, meta_idx, tmp_dir=None):
                 image_size=torch.ones(1, 2) * size,
                 device='cuda',
             )
+        else:
+            cameras = None
 
         # --- rerun logging --- 
         see = lambda x: x.detach().cpu().numpy()

@@ -2,7 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import torch
-from pytorch3d.ops import knn_points
+
+# Conditionally import PyTorch3D
+try:
+    from pytorch3d.ops import knn_points
+    PYTORCH3D_AVAILABLE = True
+except ImportError:
+    PYTORCH3D_AVAILABLE = False
 
 
 def calculate_dynamic_epsilon(point_cloud):
@@ -13,6 +19,11 @@ def calculate_dynamic_epsilon(point_cloud):
     :param point_cloud: Input point cloud as a PyTorch tensor of shape (N, 3), where N is the number of points.
     :return: Calculated epsilon value.
     """
+    if not PYTORCH3D_AVAILABLE:
+        # Fallback: use a simple heuristic based on point cloud size
+        print("Warning: PyTorch3D not available, using simple epsilon calculation")
+        return 50.0  # Default fallback value
+    
     # Ensure the point cloud is on the appropriate device (e.g., GPU)
     point_cloud = point_cloud.to(device='cuda')  # Move data to GPU if available
 
