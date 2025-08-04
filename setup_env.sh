@@ -89,31 +89,25 @@ fi
 echo "Step 3: Installing kornia (without flash attention)..."
 FLASH_ATTN_SKIP_CUDA_BUILD=1 uv pip install kornia
 
-echo "Step 4: Installing xformers for memory efficiency..."
-# Try to install xformers - it significantly reduces memory usage
-# First check if we have CUDA 12.8 compatible xformers
-echo "Attempting to install xformers..."
+echo "Step 4: Building xformers from source for RTX 5080 (sm_120) support..."
+# xformers is critical for memory efficiency, especially with large models like VGGT
 
 # Set environment variables for memory efficiency
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# Try pre-built xformers from PyTorch nightly  
-if ! uv pip install xformers --index-url https://download.pytorch.org/whl/cu121; then
-    echo "Pre-built xformers not available for your configuration"
-    echo "Attempting to build xformers from source (this may take a while)..."
+# Check if xformers is already installed and working
+if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficient_attention(torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half())" 2>/dev/null; then
+    echo "✓ xformers is already installed and working"
+    python -c "import xformers; print(f'  Version: {xformers.__version__}')"
+else
+    echo "xformers not found or not working, building from source..."
     
-    # Install build dependencies
-    uv pip install ninja
-    
-    # Set build flags for RTX 5080 compatibility
-    export TORCH_CUDA_ARCH_LIST="7.0;7.5;8.0;8.6;8.9;9.0+PTX"
-    export XFORMERS_ENABLE_DEBUG_ASSERTIONS=0
-    export MAX_JOBS=4
-    
-    # Build xformers from source - use 0.0.23 which has better compatibility
-    if ! uv pip install "xformers==0.0.23" --no-deps; then
-        echo "xformers installation failed - will use standard attention"
-        echo "This may result in higher memory usage"
+    # Use the dedicated build script
+    if [ -f "scripts/build_xformers.sh" ]; then
+        bash scripts/build_xformers.sh
+    else
+        echo "WARNING: build_xformers.sh not found, skipping xformers installation"
+        echo "The system will use standard attention (higher memory usage)"
     fi
 fi
 
