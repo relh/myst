@@ -11,10 +11,8 @@ source "$SCRIPT_DIR/.venv/bin/activate"
 # Use the correct Python from the virtual environment
 PYTHON_BIN="$SCRIPT_DIR/.venv/bin/python"
 
-# Set up PYTHONPATH to include VGGT
-export PYTHONPATH="$SCRIPT_DIR/vggt:$PYTHONPATH"
-
-# Check if VGGT directory exists
+# No need to set PYTHONPATH since VGGT is installed as a package
+# Just check if VGGT directory exists
 if [ ! -d "$SCRIPT_DIR/vggt" ]; then
     echo "Warning: VGGT directory not found at $SCRIPT_DIR/vggt"
     echo "Please run ./setup_env.sh first"

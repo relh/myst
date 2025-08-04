@@ -108,29 +108,28 @@ VGGT_DIR="$(pwd)/vggt"
 if [ ! -d "$VGGT_DIR" ]; then
     echo "Cloning VGGT repository..."
     git clone https://github.com/facebookresearch/vggt.git
-    
-    echo "Installing VGGT requirements..."
-    cd vggt
-    # Install VGGT dependencies
-    uv pip install -r requirements.txt
-    
-    # Download model checkpoint
-    echo "Downloading VGGT model checkpoint..."
-    mkdir -p checkpoints
-    cd checkpoints
-    # Download the commercial-use allowed checkpoint
-    if [ ! -f "vggt_1b.pth" ]; then
-        echo "Downloading VGGT-1B model (this may take a while)..."
-        wget -q --show-progress https://dl.fbaipublicfiles.com/vggt/checkpoints/vggt_1b.pth || {
-            echo "Failed to download model. You can manually download from:"
-            echo "https://dl.fbaipublicfiles.com/vggt/checkpoints/vggt_1b.pth"
-            echo "and place it in $VGGT_DIR/checkpoints/"
-        }
-    fi
-    cd ../..
 else
     echo "VGGT repository already exists at $VGGT_DIR"
 fi
+
+# Always reinstall VGGT to ensure it's properly set up
+echo "Installing VGGT and its requirements..."
+cd vggt
+
+# Install VGGT dependencies
+if [ -f "requirements.txt" ]; then
+    uv pip install -r requirements.txt
+fi
+
+# Install VGGT as an editable package so Python can find it properly
+echo "Installing VGGT as editable package..."
+uv pip install -e .
+
+# Create checkpoints directory if needed
+mkdir -p checkpoints
+
+# Return to myst directory
+cd ..
 
 echo "Step 7: Testing installation..."
 VGGT_DIR="$(pwd)/vggt"

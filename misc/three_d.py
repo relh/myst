@@ -250,7 +250,10 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             intrinsic_last = intrinsic.squeeze(0)[last_idx]
             
             # Convert from OpenCV convention (camera from world) to world from camera
-            world2cam = extrinsic_last
+            # VGGT returns 3x4 extrinsic matrices, convert to 4x4 homogeneous format
+            world2cam_3x4 = extrinsic_last
+            world2cam = torch.eye(4, device=world2cam_3x4.device, dtype=world2cam_3x4.dtype)
+            world2cam[:3, :] = world2cam_3x4
             
             # Unproject all depth maps to get 3D points
             all_pts_3d = []
@@ -269,6 +272,10 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
                     intrinsic_i.unsqueeze(0)
                 ).squeeze(0)
                 
+                # Ensure point_map_i is a tensor
+                if isinstance(point_map_i, np.ndarray):
+                    point_map_i = torch.from_numpy(point_map_i).to(device)
+                
                 # Flatten and filter valid points
                 h, w = point_map_i.shape[:2]
                 point_map_flat = point_map_i.reshape(-1, 3)
@@ -280,15 +287,12 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
                 # Count valid points
                 num_valid = valid_mask.sum().item()
                 if num_valid > 0:
-                    # Debug info
-                    print(f"Debug: valid_mask type: {type(valid_mask)}, device: {valid_mask.device}")
-                    print(f"Debug: point_map_flat type: {type(point_map_flat)}, device: {point_map_flat.device}")
-                    
                     # Get valid points using boolean indexing (staying on GPU)
                     valid_points = point_map_flat[valid_mask]
                     
                     # Get corresponding colors
-                    img_colors = images_pil[i]
+                    # Resize the image to match the depth map dimensions
+                    img_colors = images_pil[i].resize((h, w), Image.BILINEAR)
                     # Convert PIL image to tensor on the correct device
                     img_array = np.array(img_colors)
                     img_colors_tensor = torch.from_numpy(img_array).to(device, dtype=torch.float32)
