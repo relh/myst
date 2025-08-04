@@ -159,7 +159,7 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
 def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
     global vggt_model
     device = 'cuda'
-    dtype = torch.bfloat16
+    dtype = torch.float16  # Use float16 instead of bfloat16 for better memory efficiency
     
     if vggt_model is None:
         try:
@@ -170,26 +170,29 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             # Initialize VGGT model
             vggt_model = VGGT()
             
-            # Load checkpoint if available
+            # Load checkpoint - try local first, then download from HuggingFace
             import os
-            checkpoint_paths = [
-                "vggt/checkpoints/vggt_1b.pth",  # Local path in myst directory
-                os.path.expanduser("~/.cache/torch/hub/checkpoints/vggt_1b.pth"),  # Torch hub cache
-            ]
+            checkpoint_path = "vggt/checkpoints/vggt_1b.pt"
             
-            checkpoint_loaded = False
-            for checkpoint_path in checkpoint_paths:
-                if os.path.exists(checkpoint_path):
-                    print(f"Loading VGGT checkpoint from {checkpoint_path}...")
-                    checkpoint = torch.load(checkpoint_path, map_location=device)
-                    vggt_model.load_state_dict(checkpoint['model_state_dict'] if 'model_state_dict' in checkpoint else checkpoint)
-                    checkpoint_loaded = True
-                    break
-            
-            if not checkpoint_loaded:
-                print("Warning: No VGGT checkpoint found. Using random weights.")
-                print("Download checkpoint from: https://dl.fbaipublicfiles.com/vggt/checkpoints/vggt_1b.pth")
-                print("and place it in vggt/checkpoints/")
+            if os.path.exists(checkpoint_path):
+                print(f"Loading VGGT checkpoint from {checkpoint_path}...")
+                checkpoint = torch.load(checkpoint_path, map_location=device)
+                vggt_model.load_state_dict(checkpoint)
+            else:
+                # Download from HuggingFace
+                print("Downloading VGGT-1B checkpoint from HuggingFace...")
+                try:
+                    _URL = "https://huggingface.co/facebook/VGGT-1B/resolve/main/model.pt"
+                    state_dict = torch.hub.load_state_dict_from_url(_URL, map_location=device)
+                    vggt_model.load_state_dict(state_dict)
+                    
+                    # Save for next time
+                    os.makedirs("vggt/checkpoints", exist_ok=True)
+                    torch.save(state_dict, checkpoint_path)
+                    print(f"Checkpoint saved to {checkpoint_path}")
+                except Exception as e:
+                    print(f"Warning: Failed to download VGGT checkpoint: {e}")
+                    print("Using random weights.")
             
             vggt_model = vggt_model.to(device)
             vggt_model.eval()

@@ -112,10 +112,11 @@ def main(args, meta_idx, tmp_dir=None):
         # --- rerun logging --- 
         see = lambda x: x.detach().cpu().numpy()
         inpy = see(intrinsics)
-        rr.set_time_sequence("frame", idx+1)
+        rr.set_time(sequence=[("frame", idx+1)])
         rr.log("world/points", rr.Points3D(see(pts_3d), colors=see(rgb_3d)))
         rr.log("world/camera", rr.Transform3D(translation=see(world2cam[:3, 3]),
-                                              mat3x3=see(world2cam[:3, :3]), from_parent=True))
+                                              mat3x3=see(world2cam[:3, :3]), 
+                                              relation=rr.TransformRelation.ChildFromParent))
         rr.log("world/camera/image", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
         rr.log("world/camera/image", rr.Image(see(image)))
         rr.log("world/camera/mask", rr.Pinhole(resolution=[size, size], focal_length=[inpy[0,0], inpy[1,1]], principal_point=[inpy[0,-1], inpy[1,-1]]))
