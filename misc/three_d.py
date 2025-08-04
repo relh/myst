@@ -148,8 +148,9 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     if vggt_model is None:
         try:
             # Try to load VGGT model
-            from vggt.model import VGGTModel
-            vggt_model = VGGTModel.from_pretrained("facebook/vggt").to(device)
+            from vggt.models import VGGT
+            vggt_model = VGGT()
+            vggt_model = vggt_model.to(device)
             vggt_model.eval()
         except ImportError:
             print("VGGT not installed. Please install with: pip install vggt")
@@ -158,7 +159,6 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             print(f"Error loading VGGT model: {e}")
             print("Trying alternative loading method...")
             # Alternative loading method based on VGGT repo
-            import torch.hub
             vggt_model = torch.hub.load('facebookresearch/vggt', 'vggt', trust_repo=True).to(device)
             vggt_model.eval()
     
@@ -171,7 +171,11 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     
     # Prepare images tensor for VGGT (expects normalized float32/bfloat16)
     from torchvision import transforms
+    # VGGT expects image dimensions divisible by patch size (14)
+    # Common sizes: 224, 336, 448, 560, 672, 784, 896
+    target_size = 560  # 560 / 14 = 40 patches
     transform = transforms.Compose([
+        transforms.Resize((target_size, target_size)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])

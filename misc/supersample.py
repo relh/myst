@@ -99,7 +99,10 @@ def initialize_pipeline():
     pipeline.vae.scaling_factor=0.08333
 
     #pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config)
-    pipeline.enable_xformers_memory_efficient_attention()
+    try:
+        pipeline.enable_xformers_memory_efficient_attention()
+    except (ModuleNotFoundError, RuntimeError) as e:
+        print(f"Warning: xformers memory efficient attention not available ({e}), using standard attention")
     pipeline = pipeline.to("cuda")
 
 
