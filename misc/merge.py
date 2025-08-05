@@ -20,9 +20,25 @@ def calculate_dynamic_epsilon(point_cloud):
     :return: Calculated epsilon value.
     """
     if not PYTORCH3D_AVAILABLE:
-        # Fallback: use a simple heuristic based on point cloud size
-        print("Warning: PyTorch3D not available, using simple epsilon calculation")
-        return 50.0  # Default fallback value
+        # Fallback: calculate epsilon based on point cloud bounding box and density
+        print("Warning: PyTorch3D not available, using bounding box-based epsilon calculation")
+        
+        # Calculate bounding box
+        min_coords = point_cloud.min(dim=0)[0]
+        max_coords = point_cloud.max(dim=0)[0]
+        bbox_diagonal = torch.norm(max_coords - min_coords).item()
+        
+        # Estimate epsilon as a fraction of the bounding box diagonal
+        # adjusted by the number of points (denser clouds need smaller epsilon)
+        num_points = point_cloud.shape[0]
+        density_factor = min(1.0, num_points / 10000.0)  # normalize by expected point count
+        
+        # Calculate epsilon: smaller for denser clouds, larger for sparser clouds
+        epsilon = bbox_diagonal * 0.02 / density_factor  # 2% of diagonal, adjusted by density
+        epsilon = max(1.0, min(100.0, epsilon))  # Clamp between reasonable bounds
+        
+        print(f"Calculated epsilon: {epsilon:.2f} (bbox diagonal: {bbox_diagonal:.2f}, points: {num_points})")
+        return epsilon
     
     # Ensure the point cloud is on the appropriate device (e.g., GPU)
     point_cloud = point_cloud.to(device='cuda')  # Move data to GPU if available

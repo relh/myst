@@ -131,6 +131,9 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
         dust_model = AsymmetricMASt3R.from_pretrained(weights_path).to('cuda')
         dust_model.eval()  # Set to eval mode for inference
         print(f"Model loaded successfully. Note: Dust3r/Mast3r uses ~8-10GB GPU memory")
+        
+        # Set environment for memory efficiency
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
     # --- whether to standalone index 0 image or not ---
     images = [Image.fromarray(image.cpu().numpy()) for image in images]
@@ -138,15 +141,24 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     images, filelist = load_images(images, size=512)
 
     # --- run dust3r ---
-    with torch.no_grad():  # Ensure no gradients are computed during inference
-        pairs = make_pairs(images, scene_graph='complete', prefilter=None,
-                           symmetrize=True)  # if num_images > 2 else True)
-        #output = inference(pairs, dust_model, device, batch_size=batch_size)
+    # Note: sparse_global_alignment needs gradients for its internal optimization loop
+    pairs = make_pairs(images, scene_graph='complete', prefilter=None,
+                       symmetrize=True)  # if num_images > 2 else True)
+    #output = inference(pairs, dust_model, device, batch_size=batch_size)
 
-        scene = sparse_global_alignment(filelist, pairs, tmp_dir,
-                                    dust_model, lr1=0.07, niter1=100, lr2=0.014, niter2=100, device=device,
-                                    opt_depth='depth' in 'refine', shared_intrinsics=False,
-                                    matching_conf_thr=5.)#, **kw)
+    # This optimization refines camera poses and point clouds - it needs gradients!
+    # Check available GPU memory and adjust iterations if needed
+    gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
+    if gpu_memory_gb < 20:  # For GPUs with less than 20GB
+        niter1, niter2 = 50, 50  # Reduced iterations for faster processing
+        print(f"GPU has {gpu_memory_gb:.1f}GB - using reduced iterations for optimization")
+    else:
+        niter1, niter2 = 100, 100  # Full iterations for better quality
+    
+    scene = sparse_global_alignment(filelist, pairs, tmp_dir,
+                                dust_model, lr1=0.07, niter1=niter1, lr2=0.014, niter2=niter2, device=device,
+                                opt_depth='depth' in 'refine', shared_intrinsics=False,
+                                matching_conf_thr=5.)#, **kw)
 
     # --- post processing ---
     use = lambda x: x.float().cuda().detach()
@@ -154,6 +166,17 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     world2cam = torch.linalg.inv(all_cam2world[-1])
     intrinsics = use(scene.intrinsics[-1])
     pts3d, depth_maps, confs = scene.get_dense_pts3d()
+    
+    # Debug: Check dust3r depth value statistics
+    if depth_maps is not None and len(depth_maps) > 0:
+        depth_stack = torch.stack(depth_maps) if isinstance(depth_maps, list) else depth_maps
+        print(f"Dust3r depth map stats:")
+        print(f"  Shape: {depth_stack.shape}")
+        print(f"  Min: {depth_stack.min().item():.3f}")
+        print(f"  Max: {depth_stack.max().item():.3f}")
+        print(f"  Mean: {depth_stack.mean().item():.3f}")
+        print(f"  Std: {depth_stack.std().item():.3f}")
+    
     pts_3d = use(torch.stack(pts3d))
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
     rgb_3d = einops.rearrange(rgb_3d, 'b h w c -> b (h w) c')
@@ -252,8 +275,8 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     
     # Prepare images tensor for VGGT (expects normalized float32/bfloat16)
     # VGGT expects image dimensions divisible by patch size (14)
-    # Common sizes: 224, 336, 448, 560, 672, 784, 896
-    target_size = 448  # 448 / 14 = 32 patches - better memory efficiency
+    # Common sizes: 224, 336, 448, 504, 518, 560, 672, 784, 896
+    target_size = 518  # 518 / 14 = 37 patches - closest to 512x512 for maximum detail
     transform = transforms.Compose([
         transforms.Resize((target_size, target_size)),
         transforms.ToTensor(),
@@ -276,6 +299,14 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             
             # Predict depth maps
             depth_map, depth_conf = vggt_model.depth_head(aggregated_tokens_list, images_batch, ps_idx)
+            
+            # VGGT outputs normalized depth (see paper Section 3.4: Ground Truth Coordinate Normalization)
+            # Apply scene scale to recover metric depth 
+            depth_scale = 3.0  # Typical indoor scene scale in meters
+            depth_map = depth_map * depth_scale
+            
+            print(f"VGGT depth after denormalization (scale={depth_scale}):")
+            print(f"  Min: {depth_map.min().item():.3f}, Max: {depth_map.max().item():.3f}")
             
             # Construct 3D points from depth maps
             

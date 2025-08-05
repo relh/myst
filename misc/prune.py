@@ -53,24 +53,22 @@ def density_pruning_simple(points, colors, std_ratio=2.5):
     """Simple distance-based pruning without PyTorch3D dependency"""
     # Calculate pairwise distances (simplified approach)
     points_np = points.cpu().numpy()
+    colors_np = colors.cpu().numpy()
     
     # Use Open3D for simple outlier removal
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points_np)
+    pcd.colors = o3d.utility.Vector3dVector(colors_np / 255.0)  # Open3D expects colors in [0,1]
     
     # Remove outliers using statistical outlier removal
-    pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=std_ratio)
+    # This returns both the cleaned point cloud AND the indices of inliers
+    pcd_clean, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=std_ratio)
     
-    # Get the remaining points
-    remaining_points = torch.tensor(np.asarray(pcd.points), device=points.device, dtype=points.dtype)
+    # Get the remaining points and colors using the indices
+    remaining_points = torch.tensor(points_np[ind], device=points.device, dtype=points.dtype)
+    remaining_colors = torch.tensor(colors_np[ind], device=colors.device, dtype=colors.dtype)
     
-    # For colors, we'll need to find which original points remain
-    # This is a simplified approach - in practice you might want more sophisticated matching
-    if len(remaining_points) < len(points):
-        # Simple approach: take first N points (not ideal but works as fallback)
-        remaining_colors = colors[:len(remaining_points)]
-    else:
-        remaining_colors = colors
+    print(f"Pruned {len(points) - len(remaining_points)} points out of {len(points)}")
     
     return remaining_points, remaining_colors
 
