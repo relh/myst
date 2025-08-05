@@ -67,16 +67,18 @@ def main(args, meta_idx, tmp_dir=None):
     image = None
     world2cam = None
     intrinsics = None
+    orig_prompt = ""  # Initialize orig_prompt
     if args.intrinsics == 'dummy':
         intrinsics = torch.tensor([[256.0*1.0, 0.0000, 256.0000],
                                [0.0000, 256.0*1.0, 256.0000],
                                [0.0000, 0.000, 1.0000]]).cuda()
     size = 512
     idx = 0
+    gen_image = None  # Initialize gen_image
+    mask = torch.ones(size, size)  # Initialize mask
     while True:
         # --- setup initial scene ---
-        if image is None: 
-            mask = torch.ones(size, size)
+        if image is None:
             if args.image != 'gen':
                 orig_prompt = prompt = ''
                 image = torch.tensor(np.array(resize_and_pad(Image.open(args.image))))
@@ -88,7 +90,7 @@ def main(args, meta_idx, tmp_dir=None):
                                         prompt=prompt, guidance_scale=7.0, model=args.model).to(torch.uint8)
                     #image = run_supersample(image, mask, prompt)
             all_images = [image.detach()]
-        else:
+        elif gen_image is not None:
             image = gen_image.to(torch.uint8)
 
         # --- estimate depth ---
@@ -112,7 +114,7 @@ def main(args, meta_idx, tmp_dir=None):
         # --- rerun logging --- 
         see = lambda x: x.detach().cpu().numpy()
         inpy = see(intrinsics)
-        rr.set_time_sequence("frame", idx+1)
+        rr.set_time_sequence(timeline="frame", sequence=idx+1)
         rr.log("world/points", rr.Points3D(see(pts_3d), colors=see(rgb_3d)))
         rr.log("world/camera", rr.Transform3D(translation=see(world2cam[:3, 3]),
                                               mat3x3=see(world2cam[:3, :3]), 
@@ -174,18 +176,7 @@ def main(args, meta_idx, tmp_dir=None):
             new_pts_3d, new_rgb_3d = density_pruning_py3d(new_pts_3d, new_rgb_3d)
             pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
         
-        # Clean up intermediate variables to free memory
-        del gen_image, mask
-        if 'new_pts_3d' in locals():
-            del new_pts_3d, new_rgb_3d
-        if 'dm' in locals():
-            del dm
-        if 'conf' in locals():
-            del conf
-        
-        # Periodically clean GPU cache
-        if idx % 10 == 0:
-            torch.cuda.empty_cache()
+
             
         idx += 1
     rr.script_teardown(args)

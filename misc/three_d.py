@@ -47,23 +47,30 @@ try:
 except ImportError:
     PERSPECTIVE2D_AVAILABLE = False
 
-# Legacy imports (kept for reference but commented out)
-# sys.path.append('depth_anything/metric_depth/')
-# sys.path.append('mast3r/dust3r/')
-# sys.path.append('mast3r/')
-# from depth_anything.metric_depth.zoedepth.models.builder import build_model
-# from depth_anything.metric_depth.zoedepth.utils.config import get_config
-# from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
-# from dust3r.image_pairs import make_pairs
-# from dust3r.inference import inference
-# from dust3r.utils.image import rgb
-# from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
-#                         pts3d_to_trimesh)
-# from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
-# from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
-# from mast3r.fast_nn import fast_reciprocal_NNs
-# from mast3r.model import AsymmetricMASt3R
-# from mast3r.utils.misc import hash_md5
+# Add paths for dust3r/mast3r (installed as siblings to myst)
+myst_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+parent_dir = os.path.dirname(myst_dir)
+sys.path.append(os.path.join(parent_dir, 'dust3r'))
+sys.path.append(os.path.join(parent_dir, 'mast3r'))
+
+# Conditional imports for dust3r/mast3r (only loaded when needed)
+DUST3R_AVAILABLE = False
+try:
+    from dust3r.cloud_opt import GlobalAlignerMode, global_aligner
+    from dust3r.image_pairs import make_pairs
+    from dust3r.inference import inference
+    from dust3r.utils.image import rgb
+    from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
+                            pts3d_to_trimesh)
+    from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
+    from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
+    from mast3r.fast_nn import fast_reciprocal_NNs
+    from mast3r.model import AsymmetricMASt3R
+    from mast3r.utils.misc import hash_md5
+    DUST3R_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: Dust3r/Mast3r not available: {e}")
+    print("To use --depth dust, run: bash scripts/setup_dust3r_mast3r.sh")
 
 ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
 metric_model = None
@@ -100,19 +107,30 @@ def load_images(images, size, square_ok=True):
 
 def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
     """
-    Note: This function requires dust3r/mast3r imports which are commented out above.
-    To use this function, uncomment the dust3r/mast3r imports.
+    Use Dust3r/Mast3r for depth estimation and 3D reconstruction.
     """
-    raise NotImplementedError("Dust3r/Mast3r support has been replaced by VGGT. To re-enable, uncomment the dust3r/mast3r imports.")
+    if not DUST3R_AVAILABLE:
+        raise ImportError("Dust3r/Mast3r not available. Please run: bash scripts/setup_dust3r_mast3r.sh")
     
     global dust_model
     device = 'cuda'
     batch_size = 1
     if dust_model is None:
-        #weights_path = "dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth"
-        weights_path = 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth'
-        from mast3r.model import AsymmetricMASt3R  # noqa
+        # Use absolute path to the mast3r checkpoint
+        myst_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        parent_dir = os.path.dirname(myst_dir)
+        weights_path = os.path.join(parent_dir, 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth')
+        
+        if not os.path.exists(weights_path):
+            # Try dust3r checkpoint as fallback
+            weights_path = os.path.join(parent_dir, 'dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth')
+            if not os.path.exists(weights_path):
+                raise FileNotFoundError(f"Model checkpoint not found. Please run: bash scripts/setup_dust3r_mast3r.sh")
+        
+        print(f"Loading model from {weights_path}...")
         dust_model = AsymmetricMASt3R.from_pretrained(weights_path).to('cuda')
+        dust_model.eval()  # Set to eval mode for inference
+        print(f"Model loaded successfully. Note: Dust3r/Mast3r uses ~8-10GB GPU memory")
 
     # --- whether to standalone index 0 image or not ---
     images = [Image.fromarray(image.cpu().numpy()) for image in images]
@@ -120,18 +138,15 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     images, filelist = load_images(images, size=512)
 
     # --- run dust3r ---
-    # The following lines would need the dust3r/mast3r imports
-    from dust3r.image_pairs import make_pairs  # noqa
-    from mast3r.cloud_opt.sparse_ga import sparse_global_alignment  # noqa
-    
-    pairs = make_pairs(images, scene_graph='complete', prefilter=None,\
-                       symmetrize=True)# if num_images > 2 else True)
-    #output = inference(pairs, dust_model, device, batch_size=batch_size)
+    with torch.no_grad():  # Ensure no gradients are computed during inference
+        pairs = make_pairs(images, scene_graph='complete', prefilter=None,
+                           symmetrize=True)  # if num_images > 2 else True)
+        #output = inference(pairs, dust_model, device, batch_size=batch_size)
 
-    scene = sparse_global_alignment(filelist, pairs, tmp_dir,
-                                dust_model, lr1=0.07, niter1=100, lr2=0.014, niter2=100, device=device,
-                                opt_depth='depth' in 'refine', shared_intrinsics=False,
-                                matching_conf_thr=5.)#, **kw)
+        scene = sparse_global_alignment(filelist, pairs, tmp_dir,
+                                    dust_model, lr1=0.07, niter1=100, lr2=0.014, niter2=100, device=device,
+                                    opt_depth='depth' in 'refine', shared_intrinsics=False,
+                                    matching_conf_thr=5.)#, **kw)
 
     # --- post processing ---
     use = lambda x: x.float().cuda().detach()
@@ -148,13 +163,23 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
 
     pts_3d = pts_3d#[conf > 0.5]
     rgb_3d = rgb_3d#[conf > 0.5]
+    
+    # Reshape for output
+    pts_3d_out = pts_3d.reshape(-1, 3)
+    rgb_3d_out = rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8)
+    conf_out = conf.reshape(-1, 1)
+    
+    # Clean up intermediate tensors to free GPU memory
+    del scene, all_cam2world, pts3d, confs
+    del pts_3d, rgb_3d, conf
+    torch.cuda.empty_cache()
 
-    return pts_3d.reshape(-1, 3),\
-           rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8),\
+    return pts_3d_out,\
+           rgb_3d_out,\
            world2cam,\
            intrinsics,\
            depth_maps,\
-           conf.reshape(-1, 1)
+           conf_out
 
 def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
     global vggt_model
