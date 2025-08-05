@@ -121,43 +121,17 @@ We can create infinite 3D scenes, for use as a potential dataset. We can manuall
 
 ## Installation
 
-### Prerequisites
-
-- **Python 3.12+** (recommended)
-- **CUDA 12.x+** for GPU acceleration (NVIDIA GPU with at least 8GB VRAM recommended)
-- **uv** package manager (recommended for fast, reproducible installs):  
-  [Install uv](https://astral.sh/uv/):  
-  ```bash
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
-
-### Quick Setup
-
 ```bash
 # Clone the repository
 git clone https://github.com/your-repo/myst.git
 cd myst
 
-# Run the environment setup script
+# Run setup (installs all dependencies and downloads model checkpoints)
 chmod +x setup_env.sh
 ./setup_env.sh
 ```
 
-This will:
-- Create a virtual environment (if not already active)
-- Install all dependencies (PyTorch, torchvision, torchaudio, xformers, kornia, etc.)
-- Set up VGGT if not already present
-
-### Running Myst
-
-After setup, you can run Myst with:
-```bash
-./run_myst.sh --headless --depth vggt --renderer raster --prompt auto --control auto --image gen --model sd2
-```
-Or, for manual runs:
-```bash
-PYTHONPATH=../vggt:$VIRTUAL_ENV/lib/python3.12/site-packages python run.py
-```
+**Prerequisites:** Python 3.12+, CUDA 12.x+, [uv package manager](https://astral.sh/uv/)
 
 ## Run
 
@@ -170,7 +144,8 @@ You can also use other depth estimation methods:
 - `--depth vggt` (default): VGGT - fastest and most accurate (CVPR 2025 Best Paper)
 - `--depth metric`: Metric3D
 - `--depth da`: Depth Anything
-- `--depth dust`: Dust3r/Mast3r (requires setup - see scripts/setup_dust3r_mast3r.sh)
+- `--depth dust`: Dust3r (requires `./setup_env.sh --with-dust3r`)
+- `--depth mast3r`: Mast3r (requires `./setup_env.sh --with-dust3r`)
 
 ### Command Line Options
 

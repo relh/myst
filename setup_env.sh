@@ -6,10 +6,19 @@ echo "It will install dependencies, set up VGGT, and prepare your workspace."
 
 # Parse command line arguments
 REBUILD=false
-if [[ "$1" == "--rebuild" ]] || [[ "$1" == "--nuclear" ]]; then
-    REBUILD=true
-    echo "🔥 NUCLEAR REBUILD MODE: Will completely reinstall PyTorch ecosystem"
-fi
+WITH_DUST3R=false
+for arg in "$@"; do
+    case $arg in
+        --rebuild|--nuclear)
+            REBUILD=true
+            echo "🔥 NUCLEAR REBUILD MODE: Will completely reinstall PyTorch ecosystem"
+            ;;
+        --with-dust3r)
+            WITH_DUST3R=true
+            echo "📦 Will also install Dust3r/Mast3r models"
+            ;;
+    esac
+done
 
 # Check if uv is available
 if ! command -v uv &> /dev/null; then
@@ -181,6 +190,76 @@ print('=== Installation successful! ===')
 echo "Step 8: Creating output directories..."
 mkdir -p outputs/imgs outputs/pickles
 
+# Optional: Install Dust3r/Mast3r
+if [ "$WITH_DUST3R" = true ]; then
+    echo ""
+    echo "Step 9: Installing Dust3r/Mast3r models..."
+    
+    # Get parent directory
+    PARENT_DIR="$(dirname "$(pwd)")"
+    
+    # Setup CroCo (required by both dust3r and mast3r)
+    echo "Installing CroCo dependencies..."
+    CROCO_DIR="$PARENT_DIR/croco"
+    if [ ! -d "$CROCO_DIR" ]; then
+        cd "$PARENT_DIR"
+        git clone https://github.com/naver/croco.git
+        cd croco
+        # Download CroCo checkpoint
+        mkdir -p checkpoints/
+        if [ ! -f "checkpoints/CroCo_V2_ViTLarge_BaseDecoder.pth" ]; then
+            cd checkpoints/
+            wget https://download.europe.naverlabs.com/ComputerVision/CroCo/CroCo_V2_ViTLarge_BaseDecoder.pth
+            cd ..
+        fi
+        cd ..
+    fi
+    cd "$PARENT_DIR/myst"
+    
+    # Setup Dust3r
+    echo "Installing Dust3r..."
+    DUST3R_DIR="$PARENT_DIR/dust3r"
+    if [ ! -d "$DUST3R_DIR" ]; then
+        cd "$PARENT_DIR"
+        git clone --recursive https://github.com/naver/dust3r.git
+        cd dust3r
+        uv pip install -r requirements.txt
+        uv pip install -r requirements_optional.txt || echo "Some optional requirements failed (this is ok)"
+        
+        # Download checkpoint
+        mkdir -p checkpoints
+        if [ ! -f "checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth" ]; then
+            cd checkpoints
+            wget https://download.europe.naverlabs.com/ComputerVision/DUSt3R/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth
+            cd ..
+        fi
+        cd ..
+    fi
+    cd "$PARENT_DIR/myst"
+    
+    # Setup Mast3r
+    echo "Installing Mast3r..."
+    MAST3R_DIR="$PARENT_DIR/mast3r"
+    if [ ! -d "$MAST3R_DIR" ]; then
+        cd "$PARENT_DIR"
+        git clone --recursive https://github.com/naver/mast3r.git
+        cd mast3r
+        uv pip install -r requirements.txt
+        
+        # Download checkpoint
+        mkdir -p checkpoints
+        if [ ! -f "checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth" ]; then
+            cd checkpoints
+            wget https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth
+            cd ..
+        fi
+        cd ..
+    fi
+    cd "$PARENT_DIR/myst"
+    
+    echo "✓ Dust3r/Mast3r models installed"
+fi
+
 echo "=== Setup complete! ==="
 echo ""
 if [ "$REBUILD" = true ]; then
@@ -193,8 +272,19 @@ echo ""
 echo "Or manually with:"
 echo "  PYTHONPATH=$(pwd)/vggt:\$PYTHONPATH python run.py"
 echo ""
-echo "Note: The script will automatically fall back to raster renderer if PyTorch3D is not available."
-echo "Note: xformers flash attention is disabled for compatibility."
-echo ""
-echo "Optional: To use Dust3r/Mast3r instead of VGGT, run:"
-echo "  bash scripts/setup_dust3r_mast3r.sh"
+if [ "$WITH_DUST3R" = true ]; then
+    echo "Available depth models:"
+    echo "  --depth vggt    : VGGT (default, fastest)"
+    echo "  --depth dust    : Dust3r (relative depth)"
+    echo "  --depth mast3r  : Mast3r (metric depth)"
+    echo "  --depth da      : Depth Anything"
+    echo "  --depth metric  : Metric3D"
+else
+    echo "Available depth models:"
+    echo "  --depth vggt    : VGGT (default, fastest)"
+    echo "  --depth da      : Depth Anything"
+    echo "  --depth metric  : Metric3D"
+    echo ""
+    echo "Optional: To also install Dust3r/Mast3r models, run:"
+    echo "  ./setup_env.sh --with-dust3r"
+fi
