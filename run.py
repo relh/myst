@@ -112,7 +112,7 @@ def main(args, meta_idx, tmp_dir=None):
         # --- rerun logging --- 
         see = lambda x: x.detach().cpu().numpy()
         inpy = see(intrinsics)
-        rr.set_time(sequence=[("frame", idx+1)])
+        rr.set_time_sequence("frame", idx+1)
         rr.log("world/points", rr.Points3D(see(pts_3d), colors=see(rgb_3d)))
         rr.log("world/camera", rr.Transform3D(translation=see(world2cam[:3, 3]),
                                               mat3x3=see(world2cam[:3, :3]), 
