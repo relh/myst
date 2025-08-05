@@ -89,7 +89,7 @@ fi
 echo "Step 3: Installing kornia (without flash attention)..."
 FLASH_ATTN_SKIP_CUDA_BUILD=1 uv pip install kornia
 
-echo "Step 4: Building xformers from source for RTX 5080 (sm_120) support..."
+echo "Step 4: Installing xformers with pre-built wheels..."
 # xformers is critical for memory efficiency, especially with large models like VGGT
 
 # Set environment variables for memory efficiency
@@ -100,13 +100,15 @@ if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficien
     echo "✓ xformers is already installed and working"
     python -c "import xformers; print(f'  Version: {xformers.__version__}')"
 else
-    echo "xformers not found or not working, building from source..."
+    echo "Installing xformers using pre-built CUDA 12.8 wheels..."
+    uv pip install -U xformers --index-url https://download.pytorch.org/whl/cu128
     
-    # Use the dedicated build script
-    if [ -f "scripts/build_xformers.sh" ]; then
-        bash scripts/build_xformers.sh
+    # Verify installation
+    if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficient_attention(torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half())" 2>/dev/null; then
+        echo "✓ xformers installed successfully"
+        python -c "import xformers; print(f'  Version: {xformers.__version__}')"
     else
-        echo "WARNING: build_xformers.sh not found, skipping xformers installation"
+        echo "WARNING: xformers installation failed"
         echo "The system will use standard attention (higher memory usage)"
     fi
 fi
