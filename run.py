@@ -51,7 +51,8 @@ def main(args, meta_idx, tmp_dir=None):
     rr.script_setup(args, f"{meta_idx}myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, static=True)
     if args.depth == 'da': img_to_pts_3d = img_to_pts_3d_da
-    if args.depth == 'dust': img_to_pts_3d = img_to_pts_3d_dust
+    if args.depth == 'dust': img_to_pts_3d = lambda imgs, *args, **kwargs: img_to_pts_3d_dust(imgs, *args, use_mast3r=False, **kwargs)
+    if args.depth == 'mast3r': img_to_pts_3d = lambda imgs, *args, **kwargs: img_to_pts_3d_dust(imgs, *args, use_mast3r=True, **kwargs)
     if args.depth == 'metric': img_to_pts_3d = img_to_pts_3d_metric
     if args.depth == 'vggt': img_to_pts_3d = img_to_pts_3d_vggt
     
@@ -174,7 +175,7 @@ def main(args, meta_idx, tmp_dir=None):
             new_pts_3d, new_rgb_3d, world2cam, intrinsics, dm, conf = img_to_pts_3d(all_images, world2cam, intrinsics, tmp_dir=tmp_dir)
             scale = median_scene_distance(new_pts_3d, world2cam) / 10.0
             new_pts_3d, new_rgb_3d = density_pruning_py3d(new_pts_3d, new_rgb_3d)
-            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
+            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d, epsilon=10.0)
         
 
             
@@ -202,7 +203,7 @@ if __name__ == "__main__":
     # 6. in paint black with diffusion
     parser = ArgumentParser(description="Build your own adventure.")
     rr.script_add_args(parser)
-    parser.add_argument('--depth', type=str, default='vggt', help='vggt / metric / da / dust')
+    parser.add_argument('--depth', type=str, default='vggt', help='vggt / metric / da / dust / mast3r')
     parser.add_argument('--renderer', type=str, default='py3d', help='raster / py3d')
     parser.add_argument('--prompt', type=str, default='combo', help='me / doors / auto / combo / default')
     parser.add_argument('--control', type=str, default='auto', help='me / doors / auto')

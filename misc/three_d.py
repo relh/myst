@@ -105,10 +105,8 @@ def load_images(images, size, square_ok=True):
 
     return imgs, filelist
 
-def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
-    """
-    Use Dust3r/Mast3r for depth estimation and 3D reconstruction.
-    """
+def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None, use_mast3r=True):
+    """Dust3r/Mast3r depth estimation"""
     if not DUST3R_AVAILABLE:
         raise ImportError("Dust3r/Mast3r not available. Please run: bash scripts/setup_dust3r_mast3r.sh")
     
@@ -116,49 +114,46 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     device = 'cuda'
     batch_size = 1
     if dust_model is None:
-        # Use absolute path to the mast3r checkpoint
         myst_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         parent_dir = os.path.dirname(myst_dir)
-        weights_path = os.path.join(parent_dir, 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth')
         
-        if not os.path.exists(weights_path):
-            # Try dust3r checkpoint as fallback
+        # Choose model based on preference
+        if use_mast3r:
+            weights_path = os.path.join(parent_dir, 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth')
+            model_name = "MASt3R"
+        else:
             weights_path = os.path.join(parent_dir, 'dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth')
-            if not os.path.exists(weights_path):
+            model_name = "DUSt3R"
+            
+        if not os.path.exists(weights_path):
+            # Try other model as fallback
+            alt_path = os.path.join(parent_dir, 'dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth' if use_mast3r else 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth')
+            if os.path.exists(alt_path):
+                weights_path = alt_path
+                model_name = "DUSt3R" if use_mast3r else "MASt3R"
+            else:
                 raise FileNotFoundError(f"Model checkpoint not found. Please run: bash scripts/setup_dust3r_mast3r.sh")
         
-        print(f"Loading model from {weights_path}...")
+        print(f"Loading {model_name} model...")
         dust_model = AsymmetricMASt3R.from_pretrained(weights_path).to('cuda')
-        dust_model.eval()  # Set to eval mode for inference
-        print(f"Model loaded successfully. Note: Dust3r/Mast3r uses ~8-10GB GPU memory")
-        
-        # Set environment for memory efficiency
+        dust_model.eval()
         os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
-    # --- whether to standalone index 0 image or not ---
+    # Prepare images
     images = [Image.fromarray(image.cpu().numpy()) for image in images]
     num_images = len(images)
     images, filelist = load_images(images, size=512)
 
-    # --- run dust3r ---
-    # Note: sparse_global_alignment needs gradients for its internal optimization loop
-    pairs = make_pairs(images, scene_graph='complete', prefilter=None,
-                       symmetrize=True)  # if num_images > 2 else True)
-    #output = inference(pairs, dust_model, device, batch_size=batch_size)
-
-    # This optimization refines camera poses and point clouds - it needs gradients!
-    # Check available GPU memory and adjust iterations if needed
-    gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
-    if gpu_memory_gb < 20:  # For GPUs with less than 20GB
-        niter1, niter2 = 50, 50  # Reduced iterations for faster processing
-        print(f"GPU has {gpu_memory_gb:.1f}GB - using reduced iterations for optimization")
-    else:
-        niter1, niter2 = 100, 100  # Full iterations for better quality
+    # Run dust3r/mast3r
+    pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
+    
+    # Standard iterations (300 total is typical)
+    niter1, niter2 = 100, 200
     
     scene = sparse_global_alignment(filelist, pairs, tmp_dir,
                                 dust_model, lr1=0.07, niter1=niter1, lr2=0.014, niter2=niter2, device=device,
                                 opt_depth='depth' in 'refine', shared_intrinsics=False,
-                                matching_conf_thr=5.)#, **kw)
+                                matching_conf_thr=5.)
 
     # --- post processing ---
     use = lambda x: x.float().cuda().detach()
@@ -166,17 +161,6 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     world2cam = torch.linalg.inv(all_cam2world[-1])
     intrinsics = use(scene.intrinsics[-1])
     pts3d, depth_maps, confs = scene.get_dense_pts3d()
-    
-    # Debug: Check dust3r depth value statistics
-    if depth_maps is not None and len(depth_maps) > 0:
-        depth_stack = torch.stack(depth_maps) if isinstance(depth_maps, list) else depth_maps
-        print(f"Dust3r depth map stats:")
-        print(f"  Shape: {depth_stack.shape}")
-        print(f"  Min: {depth_stack.min().item():.3f}")
-        print(f"  Max: {depth_stack.max().item():.3f}")
-        print(f"  Mean: {depth_stack.mean().item():.3f}")
-        print(f"  Std: {depth_stack.std().item():.3f}")
-    
     pts_3d = use(torch.stack(pts3d))
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
     rgb_3d = einops.rearrange(rgb_3d, 'b h w c -> b (h w) c')
@@ -184,17 +168,19 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     conf = use(torch.stack(confs))
     conf = conf.reshape(conf.shape[0], -1)
 
-    pts_3d = pts_3d#[conf > 0.5]
-    rgb_3d = rgb_3d#[conf > 0.5]
+    # Filter low confidence points
+    conf_threshold = 0.5
+    high_conf_mask = conf > conf_threshold
+    pts_3d = pts_3d[high_conf_mask]
+    rgb_3d = rgb_3d[high_conf_mask]
     
     # Reshape for output
     pts_3d_out = pts_3d.reshape(-1, 3)
     rgb_3d_out = rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8)
-    conf_out = conf.reshape(-1, 1)
+    conf_out = conf[high_conf_mask].reshape(-1, 1)
     
-    # Clean up intermediate tensors to free GPU memory
-    del scene, all_cam2world, pts3d, confs
-    del pts_3d, rgb_3d, conf
+    # Cleanup
+    del scene, all_cam2world, pts3d, confs, pts_3d, rgb_3d, conf
     torch.cuda.empty_cache()
 
     return pts_3d_out,\
@@ -246,11 +232,8 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             vggt_model.eval()
             
             # Enable gradient checkpointing for memory efficiency
-            # This trades compute for memory by recomputing activations during backward pass
-            # Since we're only doing inference, this helps reduce peak memory usage
             if hasattr(vggt_model, 'aggregator') and hasattr(vggt_model.aggregator, 'gradient_checkpointing_enable'):
                 vggt_model.aggregator.gradient_checkpointing_enable()
-                print("Enabled gradient checkpointing for VGGT aggregator")
                 
         except ImportError:
             print("VGGT not installed. Please run ./setup_env.sh to install VGGT")
@@ -300,13 +283,9 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             # Predict depth maps
             depth_map, depth_conf = vggt_model.depth_head(aggregated_tokens_list, images_batch, ps_idx)
             
-            # VGGT outputs normalized depth (see paper Section 3.4: Ground Truth Coordinate Normalization)
-            # Apply scene scale to recover metric depth 
-            depth_scale = 3.0  # Typical indoor scene scale in meters
+            # VGGT outputs normalized depth - denormalize for metric depth
+            depth_scale = 3.0
             depth_map = depth_map * depth_scale
-            
-            print(f"VGGT depth after denormalization (scale={depth_scale}):")
-            print(f"  Min: {depth_map.min().item():.3f}, Max: {depth_map.max().item():.3f}")
             
             # Construct 3D points from depth maps
             
@@ -395,13 +374,9 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
                 # Create confidence based on valid depth values
                 conf = (depth_maps > 0).float().reshape(num_images, -1)
     
-    # Clean up intermediate tensors to free GPU memory
+    # Cleanup
     del aggregated_tokens_list, ps_idx, pose_enc, extrinsic, intrinsic, depth_conf
-    del images_tensor, images_batch, point_map_i
-    if 'all_pts_3d' in locals():
-        del all_pts_3d
-    if 'all_rgb_3d' in locals():
-        del all_rgb_3d
+    del images_tensor, images_batch
     torch.cuda.empty_cache()
     
     # Return in the exact same format as dust3r
