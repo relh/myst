@@ -22,8 +22,9 @@ echo "Installing PyTorch with CUDA support..."
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # Install flash-attn (required for VGGT)
-echo "Installing Flash Attention..."
-pip install flash-attn --no-build-isolation
+# Pin to version 2.8.0 for compatibility with diffusers
+echo "Installing Flash Attention (version 2.8.0 for diffusers compatibility)..."
+pip install flash-attn==2.8.0 --no-build-isolation
 
 # Install other dependencies
 echo "Installing other dependencies..."
