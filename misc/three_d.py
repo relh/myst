@@ -197,6 +197,13 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             vggt_model = vggt_model.to(device)
             vggt_model.eval()
             
+            # Enable gradient checkpointing for memory efficiency
+            # This trades compute for memory by recomputing activations during backward pass
+            # Since we're only doing inference, this helps reduce peak memory usage
+            if hasattr(vggt_model, 'aggregator') and hasattr(vggt_model.aggregator, 'gradient_checkpointing_enable'):
+                vggt_model.aggregator.gradient_checkpointing_enable()
+                print("Enabled gradient checkpointing for VGGT aggregator")
+                
         except ImportError:
             print("VGGT not installed. Please run ./setup_env.sh to install VGGT")
             raise
@@ -221,7 +228,8 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     # Prepare images tensor for VGGT (expects normalized float32/bfloat16)
     # VGGT expects image dimensions divisible by patch size (14)
     # Common sizes: 224, 336, 448, 560, 672, 784, 896
-    target_size = 448  # 448 / 14 = 32 patches - reduced for memory efficiency
+    # Reduced to 336 for memory efficiency on 16GB GPUs
+    target_size = 336  # 336 / 14 = 24 patches - better memory efficiency
     transform = transforms.Compose([
         transforms.Resize((target_size, target_size)),
         transforms.ToTensor(),
@@ -331,6 +339,15 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             else:
                 # Create confidence based on valid depth values
                 conf = (depth_maps > 0).float().reshape(num_images, -1)
+    
+    # Clean up intermediate tensors to free GPU memory
+    del aggregated_tokens_list, ps_idx, pose_enc, extrinsic, intrinsic, depth_conf
+    del images_tensor, images_batch, point_map_i
+    if 'all_pts_3d' in locals():
+        del all_pts_3d
+    if 'all_rgb_3d' in locals():
+        del all_rgb_3d
+    torch.cuda.empty_cache()
     
     # Return in the exact same format as dust3r
     # dust3r returns: pts_3d (N,3), rgb_3d (N,3), world2cam (4,4), intrinsics (3,3), depth_maps (B,H,W), conf (N,1)

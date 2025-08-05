@@ -120,4 +120,14 @@ def merge_and_filter(da_3d, new_da_3d, da_colors, new_da_colors, epsilon=50.0):
     merged_points = combined_points[valid_indices]
     merged_colors = combined_colors[valid_indices]
 
+    # Limit total point cloud size to prevent memory overflow
+    MAX_POINTS = 1_000_000  # 1 million points max
+    
+    if merged_points.shape[0] > MAX_POINTS:
+        # Randomly subsample to maintain spatial distribution
+        indices = torch.randperm(merged_points.shape[0], device=merged_points.device)[:MAX_POINTS]
+        merged_points = merged_points[indices]
+        merged_colors = merged_colors[indices]
+        print(f"Point cloud size limited to {MAX_POINTS} points")
+    
     return merged_points, merged_colors

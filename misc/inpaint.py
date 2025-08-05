@@ -44,8 +44,10 @@ def initialize_pipeline(model):
         # Additional memory optimizations
         pipeline.enable_attention_slicing()  # Slice attention computation
         pipeline.enable_vae_slicing()  # Slice VAE computation
+        pipeline.enable_model_cpu_offload()  # Offload model components to CPU when not in use
         
-        pipeline = pipeline.to("cuda")
+        # Don't move entire pipeline to CUDA since we're using CPU offloading
+        # pipeline = pipeline.to("cuda")
 
     elif model == 'if':
         text_encoder = T5EncoderModel.from_pretrained(

@@ -172,7 +172,21 @@ def main(args, meta_idx, tmp_dir=None):
             new_pts_3d, new_rgb_3d, world2cam, intrinsics, dm, conf = img_to_pts_3d(all_images, world2cam, intrinsics, tmp_dir=tmp_dir)
             scale = median_scene_distance(new_pts_3d, world2cam) / 10.0
             new_pts_3d, new_rgb_3d = density_pruning_py3d(new_pts_3d, new_rgb_3d)
-            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)  
+            pts_3d, rgb_3d = merge_and_filter(pts_3d, new_pts_3d, rgb_3d, new_rgb_3d)
+        
+        # Clean up intermediate variables to free memory
+        del gen_image, mask
+        if 'new_pts_3d' in locals():
+            del new_pts_3d, new_rgb_3d
+        if 'dm' in locals():
+            del dm
+        if 'conf' in locals():
+            del conf
+        
+        # Periodically clean GPU cache
+        if idx % 10 == 0:
+            torch.cuda.empty_cache()
+            
         idx += 1
     rr.script_teardown(args)
 
