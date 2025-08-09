@@ -98,7 +98,7 @@ fi
 echo "Step 3: Installing kornia (pinned to <0.8 to avoid flash attention path)..."
 uv pip install "kornia>=0.7.2,<0.8.0"
 
-echo "Step 4: Installing xformers with pre-built wheels..."
+echo "Step 4: Installing xformers with pre-built nightly wheels..."
 # xformers is critical for memory efficiency, especially with large models like VGGT
 
 # Set environment variables for memory efficiency
@@ -109,8 +109,8 @@ if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficien
     echo "✓ xformers is already installed and working"
     python -c "import xformers; print(f'  Version: {xformers.__version__}')"
 else
-    echo "Installing xformers using pre-built CUDA 12.8 wheels..."
-    uv pip install -U xformers --index-url https://download.pytorch.org/whl/cu128
+    echo "Installing xformers nightly matching PyTorch nightly (CUDA 12.8)..."
+    uv pip install -U --pre xformers --index-url https://download.pytorch.org/whl/nightly/cu128
     
     # Verify installation
     if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficient_attention(torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half())" 2>/dev/null; then
