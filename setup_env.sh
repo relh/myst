@@ -185,15 +185,38 @@ echo "Step 7: Ensuring correct PyTorch version and removing xformers..."
 uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128 --upgrade
 
 # Final xformers check and removal
-if python - <<'PY'
+echo "Checking xformers compatibility..."
+python - <<'PY'
 import sys, torch
-sys.exit(0 if hasattr(torch.backends.cuda, 'is_flash_attention_available') else 1)
+
+has_api = hasattr(torch.backends.cuda, 'is_flash_attention_available')
+print(f"PyTorch flash attention API available: {has_api}")
+
+# Try importing xformers to see if it's compatible
+try:
+    import xformers
+    import xformers.ops
+    print(f"xformers {xformers.__version__} is installed")
+    
+    # Try to actually use xformers to see if it works
+    try:
+        import xformers.ops.fmha
+        print("xformers import successful, but may still have compatibility issues")
+    except Exception as e:
+        print(f"xformers import failed: {e}")
+        sys.exit(1)
+except ImportError:
+    print("xformers not installed")
+    sys.exit(0)
 PY
-then
-    echo "PyTorch flash attention API available, xformers can be used if needed"
-else
-    echo "Removing xformers to prevent import errors..."
-    uv pip uninstall -y xformers 2>/dev/null || true
+
+if [ $? -ne 0 ]; then
+    echo "xformers is incompatible with current PyTorch, removing it..."
+    uv pip uninstall xformers 2>/dev/null || true
+    # Force remove if regular uninstall fails
+    SITE_PACKAGES="$VIRTUAL_ENV/lib/python*/site-packages"
+    rm -rf $SITE_PACKAGES/xformers* 2>/dev/null || true
+    echo "xformers removed. Diffusers will use PyTorch SDPA instead."
 fi
 
 echo "Step 8: Testing installation..."
