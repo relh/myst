@@ -38,7 +38,7 @@ fi
 if [ "$REBUILD" = true ]; then
     echo "Step 0: Removing ALL PyTorch-related packages..."
     uv pip uninstall -y torch torchvision torchaudio 2>/dev/null || true
-    uv pip uninstall -y xformers diffusers kornia flash-attn 2>/dev/null || true
+    uv pip uninstall -y xformers diffusers kornia flash-attn flash-attn-2 2>/dev/null || true
     uv pip uninstall -y pytorch3d trimesh open3d 2>/dev/null || true
     uv pip uninstall -y transformers accelerate 2>/dev/null || true
     uv pip uninstall -y timm mmcv mmengine 2>/dev/null || true
@@ -95,8 +95,8 @@ else
     uv sync --no-deps  # Skip dependencies to avoid conflicts
 fi
 
-echo "Step 3: Installing kornia (without flash attention)..."
-FLASH_ATTN_SKIP_CUDA_BUILD=1 uv pip install kornia
+echo "Step 3: Installing kornia (pinned to <0.8 to avoid flash attention path)..."
+uv pip install "kornia>=0.7.2,<0.8.0"
 
 echo "Step 4: Installing xformers with pre-built wheels..."
 # xformers is critical for memory efficiency, especially with large models like VGGT
