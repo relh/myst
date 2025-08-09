@@ -59,21 +59,26 @@ if [ "$REBUILD" = true ]; then
     rm -rf $SITE_PACKAGES/lpips* 2>/dev/null || true
 fi
 
-echo "Step 1: Installing PyTorch nightly build with CUDA 12.8 support..."
-# Install latest nightly build for RTX 5080 support
-# RTX 5080 requires sm_120 support which is in newer PyTorch builds
-echo "Installing PyTorch with RTX 5080 (sm_120) support..."
-uv pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu128
+echo "Step 1: Installing PyTorch (stable, pinned) with CUDA 12.8 support..."
+# Pin explicit versions to ensure API compatibility with xformers and sm_120
+echo "Installing torch==2.7.1, torchvision==0.22.1, torchaudio==2.7.1 (cu128)..."
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128 --upgrade
 
 # Verify CUDA compute capability support
-python -c "
+python - <<'PY'
 import torch
+print(f'PyTorch: {torch.__version__}')
 if torch.cuda.is_available():
     capability = torch.cuda.get_device_capability(0)
     print(f'GPU detected: {torch.cuda.get_device_name(0)}')
     print(f'CUDA capability: {capability}')
     if capability[0] == 12 and capability[1] == 0:
         print('✓ RTX 5080 (sm_120) support confirmed')
+    # Check flash attention attribute availability (required by recent xformers)
+    try:
+        print('flash attention attribute present:', hasattr(torch.backends.cuda, 'is_flash_attention_available'))
+    except Exception as e:
+        print(f'flash attention attribute check failed: {e}')
     # Test a simple CUDA operation
     try:
         x = torch.ones(1).cuda()
@@ -83,7 +88,7 @@ if torch.cuda.is_available():
         print('You may need a newer PyTorch build')
 else:
     print('⚠ CUDA not available')
-"
+PY
 
 echo "Step 2: Installing core dependencies..."
 if [ "$REBUILD" = true ]; then
@@ -98,27 +103,44 @@ fi
 echo "Step 3: Installing kornia (pinned to <0.8 to avoid flash attention path)..."
 uv pip install "kornia>=0.7.2,<0.8.0"
 
-echo "Step 4: Installing xformers with pre-built nightly wheels..."
-# xformers is critical for memory efficiency, especially with large models like VGGT
+echo "Step 4: Installing xformers with pre-built stable wheels (conditional)..."
+# xformers is useful but only if PyTorch exposes flash attention capability API expected by recent xformers
 
 # Set environment variables for memory efficiency
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# Check if xformers is already installed and working
-if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficient_attention(torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half())" 2>/dev/null; then
-    echo "✓ xformers is already installed and working"
-    python -c "import xformers; print(f'  Version: {xformers.__version__}')"
-else
-    echo "Installing xformers nightly matching PyTorch nightly (CUDA 12.8)..."
-    uv pip install -U --pre xformers --index-url https://download.pytorch.org/whl/nightly/cu128
-    
-    # Verify installation
+# Check torch flash attention attribute availability
+if python - <<'PY'
+import sys, torch
+sys.exit(0 if hasattr(torch.backends.cuda, 'is_flash_attention_available') else 1)
+PY
+then
+    echo "PyTorch reports flash attention attribute is available; proceeding to install xformers."
+    # Check if xformers is already installed and working
     if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficient_attention(torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half())" 2>/dev/null; then
-        echo "✓ xformers installed successfully"
+        echo "✓ xformers is already installed and working"
         python -c "import xformers; print(f'  Version: {xformers.__version__}')"
     else
-        echo "WARNING: xformers installation failed"
-        echo "The system will use standard attention (higher memory usage)"
+        echo "Installing xformers stable matching PyTorch stable (CUDA 12.8)..."
+        uv pip install -U xformers --index-url https://download.pytorch.org/whl/cu128
+        if python -c "import xformers; import xformers.ops; xformers.ops.memory_efficient_attention(torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half(), torch.randn(1,8,128,64).cuda().half())" 2>/dev/null; then
+            echo "✓ xformers installed successfully"
+            python -c "import xformers; print(f'  Version: {xformers.__version__}')"
+        else
+            echo "WARNING: xformers installation failed; continuing without xformers"
+        fi
+    fi
+else
+    echo "PyTorch does not expose torch.backends.cuda.is_flash_attention_available; removing xformers to avoid import errors."
+    echo "Diffusers will fall back to PyTorch SDPA."
+    # Force uninstall xformers to prevent import errors
+    echo "Uninstalling xformers..."
+    uv pip uninstall -y xformers 2>/dev/null || true
+    # Double check it's gone
+    if python -c "import xformers" 2>/dev/null; then
+        echo "WARNING: xformers still present, forcing removal..."
+        SITE_PACKAGES="$VIRTUAL_ENV/lib/python*/site-packages"
+        rm -rf $SITE_PACKAGES/xformers* 2>/dev/null || true
     fi
 fi
 
@@ -140,14 +162,17 @@ fi
 echo "Installing VGGT and its requirements..."
 cd vggt
 
-# Install VGGT dependencies
+# Install VGGT dependencies WITHOUT overriding PyTorch
 if [ -f "requirements.txt" ]; then
-    uv pip install -r requirements.txt
+    # Install requirements but skip torch/torchvision to keep our CUDA 12.8 versions
+    uv pip install -r requirements.txt --no-deps
+    # Install only the non-torch dependencies
+    uv pip install einops opencv-python matplotlib
 fi
 
 # Install VGGT as an editable package so Python can find it properly
 echo "Installing VGGT as editable package..."
-uv pip install -e .
+uv pip install -e . --no-deps
 
 # Create checkpoints directory if needed
 mkdir -p checkpoints
@@ -155,7 +180,23 @@ mkdir -p checkpoints
 # Return to myst directory
 cd ..
 
-echo "Step 7: Testing installation..."
+echo "Step 7: Ensuring correct PyTorch version and removing xformers..."
+# Re-install PyTorch to ensure it wasn't downgraded by VGGT
+uv pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128 --upgrade
+
+# Final xformers check and removal
+if python - <<'PY'
+import sys, torch
+sys.exit(0 if hasattr(torch.backends.cuda, 'is_flash_attention_available') else 1)
+PY
+then
+    echo "PyTorch flash attention API available, xformers can be used if needed"
+else
+    echo "Removing xformers to prevent import errors..."
+    uv pip uninstall -y xformers 2>/dev/null || true
+fi
+
+echo "Step 8: Testing installation..."
 VGGT_DIR="$(pwd)/vggt"
 PYTHONPATH="$VGGT_DIR:$PYTHONPATH" python -c "
 import torch
@@ -187,13 +228,13 @@ except ImportError as e:
 print('=== Installation successful! ===')
 "
 
-echo "Step 8: Creating output directories..."
+echo "Step 9: Creating output directories..."
 mkdir -p outputs/imgs outputs/pickles
 
 # Optional: Install Dust3r/Mast3r
 if [ "$WITH_DUST3R" = true ]; then
     echo ""
-    echo "Step 9: Installing Dust3r/Mast3r models..."
+    echo "Step 10: Installing Dust3r/Mast3r models..."
     
     # Get parent directory
     PARENT_DIR="$(dirname "$(pwd)")"
