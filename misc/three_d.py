@@ -62,7 +62,6 @@ try:
     from dust3r.utils.image import rgb
     from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
                             pts3d_to_trimesh)
-    from dust3r.utils.geometry import geotrf
 
     from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
     from mast3r.fast_nn import fast_reciprocal_NNs
@@ -276,18 +275,9 @@ def img_to_pts_3d_mast3r(images, world2cam=None, intrinsics=None, dm=None, conf=
     # mast3r has intrinsics attribute
     intrinsics = use(scene.intrinsics[-1])
     
-    # Get point clouds - mast3r uses get_dense_pts3d which returns points in WORLD coordinates
+    # Get point clouds - mast3r uses get_dense_pts3d
     pts3d, depth_maps, confs = scene.get_dense_pts3d()
-    
-    # pts3d is a list of tensors, one per image, already in world coordinates
-    # We need to transform them to be relative to the last camera
-    pts3d_cam = []
-    for i, pts in enumerate(pts3d):
-        # Transform from world to last camera's coordinate system
-        pts_cam = geotrf(world2cam, use(pts))
-        pts3d_cam.append(pts_cam)
-    
-    pts_3d = torch.stack(pts3d_cam)
+    pts_3d = use(torch.stack(pts3d))
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
     rgb_3d = einops.rearrange(rgb_3d, 'b h w c -> b (h w) c')
     depth_maps = use(torch.stack(depth_maps))
