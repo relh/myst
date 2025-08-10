@@ -62,6 +62,7 @@ try:
     from dust3r.utils.image import rgb
     from dust3r.viz import (CAM_COLORS, OPENGL, add_scene_cam, cat_meshes,
                             pts3d_to_trimesh)
+    from dust3r.utils.geometry import geotrf
 
     from mast3r.cloud_opt.tsdf_optimizer import TSDFPostProcess
     from mast3r.fast_nn import fast_reciprocal_NNs
@@ -275,9 +276,18 @@ def img_to_pts_3d_mast3r(images, world2cam=None, intrinsics=None, dm=None, conf=
     # mast3r has intrinsics attribute
     intrinsics = use(scene.intrinsics[-1])
     
-    # Get point clouds - mast3r uses get_dense_pts3d
+    # Get point clouds - mast3r uses get_dense_pts3d which returns points in WORLD coordinates
     pts3d, depth_maps, confs = scene.get_dense_pts3d()
-    pts_3d = use(torch.stack(pts3d))
+    
+    # pts3d is a list of tensors, one per image, already in world coordinates
+    # We need to transform them to be relative to the last camera
+    pts3d_cam = []
+    for i, pts in enumerate(pts3d):
+        # Transform from world to last camera's coordinate system
+        pts_cam = geotrf(world2cam, use(pts))
+        pts3d_cam.append(pts_cam)
+    
+    pts_3d = torch.stack(pts3d_cam)
     rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
     rgb_3d = einops.rearrange(rgb_3d, 'b h w c -> b (h w) c')
     depth_maps = use(torch.stack(depth_maps))
@@ -327,10 +337,10 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
     dtype = torch.float16  # Use float16 instead of bfloat16 for better memory efficiency
     
     # VGGT works best with multiple views (3+ images)
-    # For 1-2 images, fall back to MASt3R for better single/two-view reconstruction
+    # For 1-2 images, fall back to dust3r for single/two-view reconstruction
     if len(images) <= 2:
-        print(f"VGGT works best with 3+ images. Using MASt3R for {len(images)} image(s)...")
-        return img_to_pts_3d_mast3r(images, world2cam, intrinsics, dm, conf, tmp_dir)
+        print(f"VGGT works best with 3+ images. Using dust3r for {len(images)} image(s)...")
+        return img_to_pts_3d_dust3r(images, world2cam, intrinsics, dm, conf, tmp_dir)
     
     if vggt_model is None:
         try:
