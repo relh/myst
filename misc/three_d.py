@@ -76,6 +76,7 @@ ImgNorm = tvf.Compose([tvf.ToTensor(), tvf.Normalize((0.5, 0.5, 0.5), (0.5, 0.5,
 metric_model = None
 da_model = None
 dust_model = None
+mast3r_model = None
 vggt_model = None
 intr_model = None
 
@@ -105,18 +106,13 @@ def load_images(images, size, square_ok=True):
 
     return imgs, filelist
 
-def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None, use_mast3r=True):
-    """Dust3r/Mast3r depth estimation"""
+def img_to_pts_3d_dust3r(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
+    """Dust3r depth estimation"""
     if not DUST3R_AVAILABLE:
-        raise ImportError("Dust3r/Mast3r not available. Please run: bash scripts/setup_dust3r_mast3r.sh")
+        raise ImportError("Dust3r not available. Please run: bash scripts/setup_dust3r_mast3r.sh")
     
     import torch
-    
-    # Import the appropriate global alignment function based on use_mast3r flag
-    if use_mast3r:
-        from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
-    else:
-        from dust3r.cloud_opt import global_aligner, GlobalAlignerMode
+    from dust3r.cloud_opt import global_aligner, GlobalAlignerMode
     
     global dust_model
     device = 'cuda'
@@ -125,33 +121,18 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
         myst_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         parent_dir = os.path.dirname(myst_dir)
         
-        # Choose model based on preference
-        if use_mast3r:
-            weights_path = os.path.join(parent_dir, 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth')
-            model_name = "MASt3R"
-        else:
-            weights_path = os.path.join(parent_dir, 'dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth')
-            model_name = "DUSt3R"
-            
-        if not os.path.exists(weights_path):
-            # Try other model as fallback
-            alt_path = os.path.join(parent_dir, 'dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth' if use_mast3r else 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth')
-            if os.path.exists(alt_path):
-                weights_path = alt_path
-                model_name = "MASt3R" if use_mast3r else "DUSt3R"
-            else:
-                raise FileNotFoundError(f"Model checkpoint not found. Please run: bash scripts/setup_dust3r_mast3r.sh")
+        weights_path = os.path.join(parent_dir, 'dust3r/checkpoints/DUSt3R_ViTLarge_BaseDecoder_512_dpt.pth')
         
-        print(f"Loading {model_name} model...")
-        if use_mast3r:
-            dust_model = AsymmetricMASt3R.from_pretrained(weights_path).to('cuda')
-        else:
-            from dust3r.model import AsymmetricCroCo3DStereo, load_model
-            # Manually load with weights_only=False for dust3r due to argparse.Namespace in checkpoint
-            import argparse
-            torch.serialization.add_safe_globals([argparse.Namespace])
-            dust_model = load_model(weights_path, device='cpu')
-            dust_model = dust_model.to('cuda')
+        if not os.path.exists(weights_path):
+            raise FileNotFoundError(f"Dust3r checkpoint not found at {weights_path}. Please run: bash scripts/setup_dust3r_mast3r.sh")
+        
+        print("Loading DUSt3R model...")
+        from dust3r.model import AsymmetricCroCo3DStereo, load_model
+        # Manually load with weights_only=False for dust3r due to argparse.Namespace in checkpoint
+        import argparse
+        torch.serialization.add_safe_globals([argparse.Namespace])
+        dust_model = load_model(weights_path, device='cpu')
+        dust_model = dust_model.to('cuda')
         dust_model.eval()
         os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
@@ -166,34 +147,24 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
     # Standard iterations (300 total is typical)
     niter1, niter2 = 100, 200
     
-    if use_mast3r:
-        scene = sparse_global_alignment(filelist, pairs, tmp_dir,
-                                    dust_model, lr1=0.07, niter1=niter1, lr2=0.014, niter2=niter2, device=device,
-                                    opt_depth='depth' in 'refine', shared_intrinsics=False,
-                                    matching_conf_thr=5.)
-    else:
-        # For dust3r, we need to run inference first, then use global_aligner
-        output = inference(pairs, dust_model, device, batch_size=batch_size)
-        mode = GlobalAlignerMode.PointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
-        scene = global_aligner(output, device=device, mode=mode)
-        
-        # Run optimization if using PointCloudOptimizer
-        if mode == GlobalAlignerMode.PointCloudOptimizer:
-            loss = scene.compute_global_alignment(init='mst', niter=niter1, schedule='cosine', lr=0.07)
-            scene.clean_pointcloud()
-            loss = scene.compute_global_alignment(init=None, niter=niter2, schedule='cosine', lr=0.014)
+    # For dust3r, we need to run inference first, then use global_aligner
+    output = inference(pairs, dust_model, device, batch_size=batch_size)
+    mode = GlobalAlignerMode.PointCloudOptimizer if num_images > 2 else GlobalAlignerMode.PairViewer
+    scene = global_aligner(output, device=device, mode=mode)
+    
+    # Run optimization if using PointCloudOptimizer
+    if mode == GlobalAlignerMode.PointCloudOptimizer:
+        loss = scene.compute_global_alignment(init='mst', niter=niter1, schedule='cosine', lr=0.07)
+        scene.clean_pointcloud()
+        loss = scene.compute_global_alignment(init=None, niter=niter2, schedule='cosine', lr=0.014)
 
     # --- post processing ---
     use = lambda x: x.float().cuda().detach()
     all_cam2world = [use(x) for x in scene.get_im_poses()]
     world2cam = torch.linalg.inv(all_cam2world[-1])
     
-    # Get intrinsics - different API for dust3r vs mast3r
-    if hasattr(scene, 'intrinsics'):
-        intrinsics = use(scene.intrinsics[-1])
-    else:
-        # dust3r uses get_intrinsics() method
-        intrinsics = use(scene.get_intrinsics()[-1])
+    # dust3r uses get_intrinsics() method
+    intrinsics = use(scene.get_intrinsics()[-1])
     # Get point clouds and other data - different API for dust3r
     pts3d = scene.get_pts3d()
     if isinstance(pts3d, list):
@@ -255,10 +226,111 @@ def img_to_pts_3d_dust(images, world2cam=None, intrinsics=None, dm=None, conf=No
            depth_maps,\
            conf_out
 
+def img_to_pts_3d_mast3r(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
+    """MASt3R depth estimation"""
+    if not DUST3R_AVAILABLE:
+        raise ImportError("MASt3R not available. Please run: bash scripts/setup_dust3r_mast3r.sh")
+    
+    import torch
+    from mast3r.cloud_opt.sparse_ga import sparse_global_alignment
+    
+    global mast3r_model
+    device = 'cuda'
+    batch_size = 1
+    if mast3r_model is None:
+        myst_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        parent_dir = os.path.dirname(myst_dir)
+        
+        weights_path = os.path.join(parent_dir, 'mast3r/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth')
+        
+        if not os.path.exists(weights_path):
+            raise FileNotFoundError(f"MASt3R checkpoint not found at {weights_path}. Please run: bash scripts/setup_dust3r_mast3r.sh")
+        
+        print("Loading MASt3R model...")
+        mast3r_model = AsymmetricMASt3R.from_pretrained(weights_path).to('cuda')
+        mast3r_model.eval()
+        os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
+
+    # Prepare images
+    images = [Image.fromarray(image.cpu().numpy()) for image in images]
+    num_images = len(images)
+    images, filelist = load_images(images, size=512)
+
+    # Run mast3r
+    pairs = make_pairs(images, scene_graph='complete', prefilter=None, symmetrize=True)
+    
+    # Standard iterations (300 total is typical)
+    niter1, niter2 = 100, 200
+    
+    scene = sparse_global_alignment(filelist, pairs, tmp_dir,
+                                mast3r_model, lr1=0.07, niter1=niter1, lr2=0.014, niter2=niter2, device=device,
+                                opt_depth='depth' in 'refine', shared_intrinsics=False,
+                                matching_conf_thr=5.)
+
+    # --- post processing ---
+    use = lambda x: x.float().cuda().detach()
+    all_cam2world = [use(x) for x in scene.get_im_poses()]
+    world2cam = torch.linalg.inv(all_cam2world[-1])
+    
+    # mast3r has intrinsics attribute
+    intrinsics = use(scene.intrinsics[-1])
+    
+    # Get point clouds - mast3r uses get_dense_pts3d
+    pts3d, depth_maps, confs = scene.get_dense_pts3d()
+    pts_3d = use(torch.stack(pts3d))
+    rgb_3d = use(torch.stack([torch.tensor(x) for x in scene.imgs])) * 255.0
+    rgb_3d = einops.rearrange(rgb_3d, 'b h w c -> b (h w) c')
+    depth_maps = use(torch.stack(depth_maps))
+    conf = use(torch.stack(confs))
+    conf = conf.reshape(conf.shape[0], -1)
+
+    # Reshape pts_3d to match the expected format
+    if pts_3d.dim() == 4:  # [B, H, W, 3]
+        pts_3d = einops.rearrange(pts_3d, 'b h w c -> b (h w) c')
+
+    # Filter low confidence points
+    conf_threshold = 0.5
+    high_conf_mask = conf > conf_threshold
+    # Apply mask per batch
+    filtered_pts = []
+    filtered_rgb = []
+    for i in range(pts_3d.shape[0]):
+        mask_i = high_conf_mask[i]
+        filtered_pts.append(pts_3d[i][mask_i])
+        filtered_rgb.append(rgb_3d[i][mask_i])
+    pts_3d = torch.cat(filtered_pts, dim=0)
+    rgb_3d = torch.cat(filtered_rgb, dim=0)
+    
+    # Reshape for output
+    pts_3d_out = pts_3d.reshape(-1, 3)
+    rgb_3d_out = rgb_3d.reshape(-1, 3)[:, :3].to(torch.uint8)
+    # Concatenate confidence values from all batches
+    filtered_conf = []
+    for i in range(conf.shape[0]):
+        filtered_conf.append(conf[i][high_conf_mask[i]])
+    conf_out = torch.cat(filtered_conf, dim=0).reshape(-1, 1)
+    
+    # Cleanup
+    del scene, all_cam2world, pts3d, pts_3d, rgb_3d, conf
+    torch.cuda.empty_cache()
+
+    return pts_3d_out,\
+           rgb_3d_out,\
+           world2cam,\
+           intrinsics,\
+           depth_maps,\
+           conf_out
+
 def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=None, tmp_dir=None):
     global vggt_model
     device = 'cuda'
     dtype = torch.float16  # Use float16 instead of bfloat16 for better memory efficiency
+    
+    # VGGT works best with multiple views (3+ images)
+    # For 1-2 images, fall back to MASt3R for better single/two-view reconstruction
+    if len(images) <= 2:
+        print(f"VGGT works best with 3+ images. Using MASt3R for {len(images)} image(s)...")
+        return img_to_pts_3d_mast3r(images, world2cam, intrinsics, dm, conf, tmp_dir)
     
     if vggt_model is None:
         try:
@@ -349,8 +421,14 @@ def img_to_pts_3d_vggt(images, world2cam=None, intrinsics=None, dm=None, conf=No
             depth_map, depth_conf = vggt_model.depth_head(aggregated_tokens_list, images_batch, ps_idx)
             
             # VGGT outputs normalized depth - denormalize for metric depth
-            depth_scale = 3.0
+            # Adjust depth scale based on scene content
+            # Higher scale = more depth variation
+            depth_scale = 5.0 if len(images) > 5 else 3.0
             depth_map = depth_map * depth_scale
+            
+            # Apply non-linear transformation to enhance depth variation
+            # This helps with the "flat" appearance
+            depth_map = torch.pow(depth_map, 0.8)  # Power < 1 enhances close-range depth variation
             
             # Construct 3D points from depth maps
             

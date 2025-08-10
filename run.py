@@ -42,7 +42,7 @@ from misc.prune import density_pruning_py3d
 from misc.scale import median_scene_distance
 from misc.supersample import run_supersample, supersample_point_cloud
 from misc.text import generate_prompt
-from misc.three_d import (img_to_pts_3d_da, img_to_pts_3d_dust,
+from misc.three_d import (img_to_pts_3d_da, img_to_pts_3d_dust3r, img_to_pts_3d_mast3r,
                           img_to_pts_3d_metric, img_to_pts_3d_vggt)
 
 
@@ -51,8 +51,8 @@ def main(args, meta_idx, tmp_dir=None):
     rr.script_setup(args, f"{meta_idx}myst")
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Y_DOWN, static=True)
     if args.depth == 'da': img_to_pts_3d = img_to_pts_3d_da
-    if args.depth == 'dust3r': img_to_pts_3d = lambda imgs, *args, **kwargs: img_to_pts_3d_dust(imgs, *args, use_mast3r=False, **kwargs)
-    if args.depth == 'mast3r': img_to_pts_3d = lambda imgs, *args, **kwargs: img_to_pts_3d_dust(imgs, *args, use_mast3r=True, **kwargs)
+    if args.depth == 'dust3r': img_to_pts_3d = img_to_pts_3d_dust3r
+    if args.depth == 'mast3r': img_to_pts_3d = img_to_pts_3d_mast3r
     if args.depth == 'metric': img_to_pts_3d = img_to_pts_3d_metric
     if args.depth == 'vggt': img_to_pts_3d = img_to_pts_3d_vggt
     
